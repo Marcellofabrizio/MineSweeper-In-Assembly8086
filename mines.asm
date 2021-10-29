@@ -398,6 +398,7 @@
 
     GET_USER_INPUT proc
 
+        push offset user_config_input
         call READ_USER_INPUT    
 
         ret
@@ -414,12 +415,6 @@
         xor CX, CX
         Xor DX, DX
 
-        push DX 
-        push CX
-        push BX
-
-        jmp READ_LOOP
-
         SAVE_CHAR:
 
         push AX     ; salva AX na pilha para poder acessar os caracteres
@@ -431,10 +426,10 @@
         cmp AL, CR
         jz SAVE_CHAR
 
-        cmp AL, BCK     ; deletou
+        cmp AL, BCK             ; deletou
         jz DELETE
         
-        cmp CX, INPUT_LIMIT     ; limite de caracteres
+        cmp DX, INPUT_LIMIT     ; limite de caracteres
         jz READ_LOOP
 
         cmp AL, '0'
@@ -443,33 +438,38 @@
         cmp AL,'9'        
         ja READ_LOOP
         
+        push DX
         mov DL, AL            
         call PRINT_CHAR
+        pop DX
 
+        push CX
         mov CL, AL      ; salvar em CL o caractere
         sub CL, '0'     ; transforma o caractere em valor ('3' -> 3)
-    
-        pop AX          ; restaurando o acumulador 
-    
-        mul BX          ; deslocamento esquerda do numero para a soma
-        add AX,CX
+        pop CX
 
-        inc CX
+        pop AX       
+        push DX
+        mul BX
+        add AX,CX
+        pop DX
+        
+        inc DX
         jmp READ_LOOP
 
         DELETE:
         
         pop AX
-        cmp CX, 0
+        cmp DX, 0
         jz SAVE_CHAR
 
-        dec CX
+        dec DX
         div BL
-        xOr AH, AH
+        xor AH, AH
 
         push AX
         div BL
-        mov DL,AH    
+        mov CL,AH    
         pop AX   
     
         call DELETE_CHAR    
