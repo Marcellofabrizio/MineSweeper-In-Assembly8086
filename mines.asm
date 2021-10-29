@@ -51,8 +51,12 @@
 
     ; =========== VARI?VEIS GERAIS =========== ;
     
-    CR equ 13
+    BCK equ 8
     LF equ 10
+    CR equ 13
+    SPACE equ 32
+
+    INPUT_LIMIT equ 3
     
     VIDEO_MODE EQU 01H             ;modo de video para tela 40x25 e texto 8x8
     VIDEO_MEM_START EQU 0B800H     ;endereco do buffer de video para modo grafico 01H
@@ -73,6 +77,14 @@
 
 .code 
 
+    ;L? um char e armazena em AX
+    READ_CHAR proc
+        mov AH, 7
+        int 21H
+        ret       
+      endp
+
+    ;Escreve um char armazenado em DX
     PRINT_CHAR proc
         push AX   
         mov AH, 2
@@ -80,6 +92,25 @@
         pop AX     
         ret  
     endp   
+
+    DELETE_CHAR proc
+        push AX
+        push DX
+
+        mov DL, BCK
+        call PRINT_CHAR
+
+        mov DL, SPACE
+        call PRINT_CHAR
+
+        mov DL, BCK
+        call PRINT_CHAR
+
+        pop DX
+        pop AX
+        ret
+    endp
+
 
     LINE_BREAK proc
         push DX
@@ -96,7 +127,7 @@
 
     ; Esceve string na tela atrav?s do endere?amento
     ; em mem?ria
-    ; CONDI??O DE ENTRADA:
+    ; CONDICAO DE ENTRADA:
     ;   AX = Deslocamento da String na mem?ria
     ;   BL 4 bits menos significativos = Cor da string
     ;   BL 4 bits mais significativos = Cor de fundo
@@ -339,6 +370,7 @@
         push BX
         push DX
 
+        mov AX, user_config_input
         mov DL, 32 ; tamanho da maior linha mais um padding
 
         mov BX, 0
@@ -350,6 +382,7 @@
         mov DH, BL
 
         call SET_CURSOR
+        call GET_USER_INPUT
 
         add BL, 2
 
@@ -359,6 +392,96 @@
         pop BX
         pop AX
 
+        ret
+    endp
+
+
+    GET_USER_INPUT proc
+
+        call READ_USER_INPUT    
+
+        ret
+    endp
+
+    READ_USER_INPUT proc
+
+        push BX
+        push CX
+        push DX 
+
+        mov BX, 10
+        xor AX, AX
+        xor CX, CX
+        Xor DX, DX
+
+        push DX 
+        push CX
+        push BX
+
+        jmp READ_LOOP
+
+        SAVE_CHAR:
+
+        push AX     ; salva AX na pilha para poder acessar os caracteres
+
+        READ_LOOP:
+        
+        call READ_CHAR
+
+        cmp AL, CR
+        jz SAVE_CHAR
+
+        cmp AL, BCK     ; deletou
+        jz DELETE
+        
+        cmp CX, INPUT_LIMIT     ; limite de caracteres
+        jz READ_LOOP
+
+        cmp AL, '0'
+        jb READ_LOOP
+
+        cmp AL,'9'        
+        ja READ_LOOP
+        
+        mov DL, AL            
+        call PRINT_CHAR
+
+        mov CL, AL      ; salvar em CL o caractere
+        sub CL, '0'     ; transforma o caractere em valor ('3' -> 3)
+    
+        pop AX          ; restaurando o acumulador 
+    
+        mul BX          ; deslocamento esquerda do numero para a soma
+        add AX,CX
+
+        inc CX
+        jmp READ_LOOP
+
+        DELETE:
+        
+        pop AX
+        cmp CX, 0
+        jz SAVE_CHAR
+
+        dec CX
+        div BL
+        xOr AH, AH
+
+        push AX
+        div BL
+        mov DL,AH    
+        pop AX   
+    
+        call DELETE_CHAR    
+        jmp SAVE_CHAR
+
+        FINISH_READ:
+        pop AX
+
+        pop DX
+        pop CX
+        pop BX
+        
         ret
     endp
 
@@ -381,6 +504,7 @@
 
         push AX
         push BX
+        xor AX, AX
         mov AH, 2       ;usado para setar posi??o
         mov BX, 0       ;p?gina do v?deo
         int 10H
