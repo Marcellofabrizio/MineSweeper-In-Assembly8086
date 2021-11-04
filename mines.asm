@@ -47,7 +47,18 @@
     field_height_config db 'ALTURA DO CAMPO [5;20]:'
     FIELD_HEIGHT_CONFIG_STR_LEN EQU 24
 
-    user_config_input dw 3 dup (?)
+    config_options_lines db 16,18,20
+    config_options dw 3 dup (?)
+
+    ; ============= VARIAVEIS CAMPO ============= ;
+
+    MAX_NUM_MINES EQU 5
+
+    MIN_FIELD_WIDTH EQU 5
+    MAX_FIELD_WIDTH EQU 40
+
+    MIN_FIELD_HEIGHT EQU 5
+    MAX_FIELD_HEIGHT EQU 20
 
     ; =========== VARI?VEIS GERAIS =========== ;
     
@@ -205,7 +216,7 @@
         call PRINT_AUTHORS
         call PRINT_CONFIGURATIONS
 
-        call GET_GAME_CONFIGS                
+        call GET_GAME_CONFIGS  
 
         pop DX
         pop CX
@@ -367,105 +378,112 @@
     GET_GAME_CONFIGS proc
 
         push AX
-        push BX
         push DX
 
-        mov AX, user_config_input
-        mov DL, 32 ; tamanho da maior linha mais um padding
+        push offset config_options   ;empilha para as tres entradas
 
-        mov BX, 0
+        mov DI, 0
         mov CX, 3   ; para o loop de tres campos
-        mov BL, 16  ; primeira linha
-
+        
         INPUT:
+        
+        mov DL, 32  ; tamanho da maior linha mais um padding
+        mov BX, offset config_options_lines  ; primeira linha
 
-        mov DH, BL
+
+        mov AL, [BX+DI]
+        mov DH, AL
+        
+        inc BX
 
         call SET_CURSOR
-        call GET_USER_INPUT
+        
+        call READ_USER_INPUT
 
-        add BL, 2
+        call SAVE_USER_INPUT
 
+        inc DI        
         loop INPUT
 
-        pop DX
         pop BX
+        pop DX
         pop AX
 
         ret
     endp
 
+    ;Posiciona cursor na linha e coluna especificadas
+    ;em DH e DL, respectivamente
+    SET_CURSOR proc
 
-    GET_USER_INPUT proc
+        push AX
+        push BX
+        xor AX, AX
+        mov AH, 2       ;usado para setar posicao
+        mov BX, 0       ;pagina do video
+        int 10H
 
-        push offset user_config_input
-        call READ_USER_INPUT    
-
+        pop BX
+        pop AX
         ret
     endp
 
-    READ_USER_INPUT proc
-
+    READ_USER_INPUT proc  ; le o valor do teclado em AX
         push BX
         push CX
         push DX 
 
-        mov BX, 10
-        xor AX, AX
+        xor AX, AX 
         xor CX, CX
-        Xor DX, DX
+        xor DX, DX ; contador de caracteres
+        mov BX, 10
+                    
+        SAVE_LOOP:
+        push AX    ; salvando o acumulador
+        READ_LOOP:       
+        call READ_CHAR           ; ler o caractere
+         
+        cmp AL, CR              ; verifica se eh ENTER
+        jz END_READ ; je
 
-        SAVE_CHAR:
-
-        push AX     ; salva AX na pilha para poder acessar os caracteres
-
-        READ_LOOP:
-        
-        call READ_CHAR
-
-        cmp AL, CR
-        jz SAVE_CHAR
-
-        cmp AL, BCK             ; deletou
+        cmp AL, BCK  ;Verifica se pressionou backspace
         jz DELETE
-        
-        cmp DX, INPUT_LIMIT     ; limite de caracteres
+
+        cmp DX, 3
         jz READ_LOOP
 
-        cmp AL, '0'
-        jb READ_LOOP
+        cmp AL, '0'            
+        jb READ_LOOP 
+      
+        cmp AL, '9'
+        ja READ_LOOP 
 
-        cmp AL,'9'        
-        ja READ_LOOP
-        
-        push DX
-        mov DL, AL            
+        push DX                 
+        mov DL, AL
         call PRINT_CHAR
         pop DX
 
-        push CX
-        mov CL, AL      ; salvar em CL o caractere
-        sub CL, '0'     ; transforma o caractere em valor ('3' -> 3)
-        pop CX
-
-        pop AX       
+        mov CL, AL
+        sub CL, '0'
+       
+        pop AX
         push DX
         mul BX
         add AX,CX
         pop DX
         
         inc DX
-        jmp READ_LOOP
+        jmp SAVE_LOOP
 
-        DELETE:
-        
+        DELETE:        
+                
         pop AX
-        cmp DX, 0
-        jz SAVE_CHAR
+        cmp DX,0
+        jz SAVE_LOOP
 
-        dec DX
-        div BL
-        xor AH, AH
+        dec DX 
+        div BL 
+        xor AH,AH
 
         push AX
         div BL
@@ -473,15 +491,173 @@
         pop AX   
     
         call DELETE_CHAR    
-        jmp SAVE_CHAR
+        jmp SAVE_LOOP
 
-        FINISH_READ:
-        pop AX
-
+        END_READ: 
+        pop AX                  ; restaurando o acumulador              
         pop DX
         pop CX
-        pop BX
+        pop BX    
+        ret
+    endp
+
+    ; Salva entrada do usu?rio no deslocamento de 
+    ; mem ria em BX 
+    ; CONDICA DE ENTRADA:
+    ;   DI = Campo atual que se deseja salvar a entrada
+    SAVE_USER_INPUT proc
+
+        mov BX, offset config_options
+
+        push DI
+        push AX
+        push DX
+        push BX
         
+        mov AX, DI
+        mov BX,2
+
+        mul BX
+
+        pop BX
+        pop DX
+
+        mov DI, AX
+        pop AX
+
+        mov [BX+DI],AX
+        pop DI
+
+        ret
+    endp
+
+    VALIDATE_USER_INPUT proc
+
+        push BX
+        push CX
+
+        call VALIDATE_MINES_INPUT
+        cmp AX, 0
+        jz INVALID_INPUT    
+
+        call VALIDATE_FIELD_WIDTH_INPUT
+        cmp AX, 0
+        jz INVALID_INPUT    
+
+        call VALIDATE_FIELD_HEIGHT_INPUT
+        cmp AX, 0
+        jz INVALID_INPUT    
+        
+        mov AX, 1
+        jmp END_VALIDATE_INPUT
+
+        INVALID_INPUT:
+        
+        mov AX, 0
+
+        END_VALIDATE_INPUT:
+        pop CX
+        POP BX
+
+        ret
+    endp
+
+    VALIDATE_MINES_INPUT proc
+
+        call GET_NUM_MINES
+        cmp AX, MAX_NUM_MINES
+        jb INVALID_MINES_VALUE 
+
+        mov AX, 1
+        jmp END_VALIDATE_MINES
+
+        INVALID_MINES_VALUE:
+        mov AX, 0
+        
+        END_VALIDATE_MINES:
+        ret
+    endp
+
+    VALIDATE_FIELD_WIDTH_INPUT proc
+
+        call GET_FIELD_WIDTH
+        cmp AX, MIN_FIELD_WIDTH
+        jb INVALID_FIELD_WIDTH 
+
+        cmp AX, MAX_FIELD_WIDTH
+        ja INVALID_FIELD_WIDTH
+
+        mov AX, 1
+        jmp END_VALIDATE_FIELD_WIDTH
+
+        INVALID_FIELD_WIDTH:
+        mov AX, 0
+        
+        END_VALIDATE_FIELD_WIDTH:
+        ret
+    endp
+
+    VALIDATE_FIELD_HEIGHT_INPUT proc
+
+        call GET_FIELD_HEIGHT
+        cmp AX, MIN_FIELD_HEIGHT
+        jb INVALID_FIELD_HEIGHT
+
+        cmp AX, MAX_FIELD_HEIGHT
+        ja INVALID_FIELD_HEIGHT
+
+        mov AX, 1
+        jmp END_VALIDATE_FIELD_HEIGHT
+
+        INVALID_FIELD_HEIGHT:
+        mov AX, 0
+        
+        END_VALIDATE_FIELD_HEIGHT:
+        ret
+    endp
+
+    GET_NUM_MINES proc    
+        MOV AX, 0
+        call GET_CONFIG_OPTION
+        ret
+    endp
+
+    GET_FIELD_WIDTH proc
+        MOV AX, 1
+        call GET_CONFIG_OPTION
+        ret
+    endp
+
+    GET_FIELD_HEIGHT proc  
+        MOV AX, 2
+        call GET_CONFIG_OPTION
+        ret
+    endp
+
+    ; Retorna opCAo de configura??o solicitada
+    ; CONDICAO DE ENTRADA:
+    ;   AX = Posicao da opcao que se deseja buscar
+    ;
+    ; CONDICAO DE SAIDA:
+    ;   AX = Opcao desejada
+    GET_CONFIG_OPTION proc
+
+        push BX
+        push DI    
+        push DX
+
+        mov DX, 0
+        mov BL, 2
+        mul BL
+
+        mov BX, offset config_options
+        mov DI, AX
+        mov AX, [BX+DI]
+
+        pop DX
+        pop DI    
+        pop BX
+
         ret
     endp
 
@@ -498,32 +674,21 @@
         ret
     endp
 
-    ;Posiciona cursor na linha e coluna especificadas
-    ;em DH e DL, respectivamente
-    SET_CURSOR proc
-
-        push AX
-        push BX
-        xor AX, AX
-        mov AH, 2       ;usado para setar posi??o
-        mov BX, 0       ;p?gina do v?deo
-        int 10H
-
-        pop BX
-        pop AX
-        ret
-    endp
-
     main:
         mov AX, @DATA
         mov DS, AX
         
+        MAIN_LOOP:
         call START_VIDEO_MODE
         call MAIN_SCREEN
-        
-        ;mov al, 0h
-        ;mov ah, 4ch
-        ;int 21h
+        call VALIDATE_USER_INPUT
+
+        cmp AX, 0
+        jz MAIN_LOOP
+
+        mov al, 0h
+        mov ah, 4ch
+        int 21h
         
     end main
     
