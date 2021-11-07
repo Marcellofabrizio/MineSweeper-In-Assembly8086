@@ -41,24 +41,42 @@
     mines_config db 'NUMERO DE MINAS (>=5):'
     MINES_CONFIG_STR_LEN EQU 22
 
-    field_width_config db 'LARGURA DO CAMPO [5;40]:'
-    FIELD_WIDTH_CONFIG_STR_LEN EQU 24 
+    board_width_config db 'LARGURA DO CAMPO [5;40]:'
+    BOARD_WIDTH_CONFIG_STR_LEN EQU 24 
 
-    field_height_config db 'ALTURA DO CAMPO [5;20]:'
-    FIELD_HEIGHT_CONFIG_STR_LEN EQU 24
+    board_height_config db 'ALTURA DO CAMPO [5;20]:'
+    BOARD_HEIGHT_CONFIG_STR_LEN EQU 24
 
     config_options_lines db 16,18,20
     config_options dw 3 dup (?)
 
-    ; ============= VARIAVEIS CAMPO ============= ;
-
     MAX_NUM_MINES EQU 5
 
-    MIN_FIELD_WIDTH EQU 5
-    MAX_FIELD_WIDTH EQU 40
+    MIN_BOARD_WIDTH EQU 5
+    MAX_BOARD_WIDTH EQU 40
 
-    MIN_FIELD_HEIGHT EQU 5
-    MAX_FIELD_HEIGHT EQU 20
+    MIN_BOARD_HEIGHT EQU 5
+    MAX_BOARD_HEIGHT EQU 20
+
+    MAX_BOARD_SIZE EQU 800
+
+    ; ============= VARIAVEIS JOGO ============= ;
+
+    INITIAL_LINE_LABEL EQU 'A'
+    INITIAL_COL_LABEL EQU '0'
+
+    possible_x_moves db -1, 0, 1, -1, 1, -1, 0, 1
+    possible_y_moves db -1, -1, -1, 0, 0, 1, 1, 1
+
+    ; vetor onde serão feitas as operacoes logicas do jogo
+    logical_board db MAX_BOARD_SIZE dup(0)
+
+    uncovered_blocks dw ?
+    board_size dw ?
+
+    game_result dw 0    ; 0 - perdeu, 1 - ganhou, so sera valido se game_over = 1
+    game_over dw 0      ; 0 - jogo em andamento, 1 - jogo terminou
+    marked_bombs DW 0   ; numero de bombas marcadas
 
     ; =========== VARI?VEIS GERAIS =========== ;
     
@@ -205,7 +223,7 @@
 
     endp
 
-    MAIN_SCREEN proc
+    START_SCREEN proc
         
         push AX
         push BX
@@ -359,8 +377,8 @@
         mov DH, 7
         mov BX, GREEN
 
-        mov AX, offset field_width_config
-        mov CX, FIELD_WIDTH_CONFIG_STR_LEN
+        mov AX, offset board_width_config
+        mov CX, BOARD_WIDTH_CONFIG_STR_LEN
 
         call WRITE_IN_VIDEO_MEM
     
@@ -368,8 +386,8 @@
         mov DH, 7
         mov BX, GREEN
 
-        mov AX, offset field_height_config
-        mov CX, FIELD_HEIGHT_CONFIG_STR_LEN
+        mov AX, offset board_height_config
+        mov CX, BOARD_HEIGHT_CONFIG_STR_LEN
 
         call WRITE_IN_VIDEO_MEM
         ret
@@ -540,11 +558,11 @@
         cmp AX, 0
         jz INVALID_INPUT    
 
-        call VALIDATE_FIELD_WIDTH_INPUT
+        call VALIDATE_BOARD_WIDTH_INPUT
         cmp AX, 0
         jz INVALID_INPUT    
 
-        call VALIDATE_FIELD_HEIGHT_INPUT
+        call VALIDATE_BOARD_HEIGHT_INPUT
         cmp AX, 0
         jz INVALID_INPUT    
         
@@ -578,41 +596,41 @@
         ret
     endp
 
-    VALIDATE_FIELD_WIDTH_INPUT proc
+    VALIDATE_BOARD_WIDTH_INPUT proc
 
-        call GET_FIELD_WIDTH
-        cmp AX, MIN_FIELD_WIDTH
-        jb INVALID_FIELD_WIDTH 
+        call GET_BOARD_WIDTH
+        cmp AX, MIN_BOARD_WIDTH
+        jb INVALID_BOARD_WIDTH 
 
-        cmp AX, MAX_FIELD_WIDTH
-        ja INVALID_FIELD_WIDTH
+        cmp AX, MAX_BOARD_WIDTH
+        ja INVALID_BOARD_WIDTH
 
         mov AX, 1
-        jmp END_VALIDATE_FIELD_WIDTH
+        jmp END_VALIDATE_BOARD_WIDTH
 
-        INVALID_FIELD_WIDTH:
+        INVALID_BOARD_WIDTH:
         mov AX, 0
         
-        END_VALIDATE_FIELD_WIDTH:
+        END_VALIDATE_BOARD_WIDTH:
         ret
     endp
 
-    VALIDATE_FIELD_HEIGHT_INPUT proc
+    VALIDATE_BOARD_HEIGHT_INPUT proc
 
-        call GET_FIELD_HEIGHT
-        cmp AX, MIN_FIELD_HEIGHT
-        jb INVALID_FIELD_HEIGHT
+        call GET_BOARD_HEIGHT
+        cmp AX, MIN_BOARD_HEIGHT
+        jb INVALID_BOARD_HEIGHT
 
-        cmp AX, MAX_FIELD_HEIGHT
-        ja INVALID_FIELD_HEIGHT
+        cmp AX, MAX_BOARD_HEIGHT
+        ja INVALID_BOARD_HEIGHT
 
         mov AX, 1
-        jmp END_VALIDATE_FIELD_HEIGHT
+        jmp END_VALIDATE_BOARD_HEIGHT
 
-        INVALID_FIELD_HEIGHT:
+        INVALID_BOARD_HEIGHT:
         mov AX, 0
         
-        END_VALIDATE_FIELD_HEIGHT:
+        END_VALIDATE_BOARD_HEIGHT:
         ret
     endp
 
@@ -622,13 +640,13 @@
         ret
     endp
 
-    GET_FIELD_WIDTH proc
+    GET_BOARD_WIDTH proc
         MOV AX, 1
         call GET_CONFIG_OPTION
         ret
     endp
 
-    GET_FIELD_HEIGHT proc  
+    GET_BOARD_HEIGHT proc  
         MOV AX, 2
         call GET_CONFIG_OPTION
         ret
@@ -661,6 +679,167 @@
         ret
     endp
 
+    START_GAME proc
+
+        call SET_INITIAL_GAME_STATE
+        call SET_INITIAL_BOARD
+
+        ret
+    endp
+
+    SET_INITIAL_GAME_STATE proc
+
+        push AX
+        push BX
+
+        call GET_BOARD_WIDTH
+        mov BX, AX
+
+        call GET_BOARD_HEIGHT
+        mul BX                      ; calcula o tamanho do tabuleiro
+
+        mov BX, offset board_size
+        mov [BX], AX                ;GUarda o tamanho definido do tabuleiro
+
+        MOV AX, 0 
+
+        mov BX, offset uncovered_blocks
+        mov [BX], AX                ; guarda número de blocos já descobertos, comeca vazio
+
+        mov BX, offset marked_bombs
+        mov [BX], AX
+
+        mov BX, offset game_result
+        mov [BX], AX 
+
+        mov BX, offset game_over
+        mov [BX], AX
+
+        pop BX
+        pop AX
+
+        ret
+    endp
+
+    SET_INITIAL_BOARD proc
+
+        push BX
+        push CX
+        push DX
+
+        call SET_LOGICAL_BOARD
+
+        pop DX
+        POP CX
+        pop BX
+
+        ret
+    endp
+
+    SET_LOGICAL_BOARD proc
+
+
+
+        ret
+    endp
+
+    DRAW_BOARD proc
+
+        push AX
+        push BX
+        push CX
+        push DX
+
+        ; limpando tela
+        call START_VIDEO_MODE
+
+        mov AX, INITIAL_LINE_LABEL
+        mov BX, 0
+        call DRAW_LABELS
+
+        mov AX, INITIAL_COL_LABEL
+        mov BX, 1
+        call DRAW_LABELS
+
+        pop DX
+        pop CX
+        pop BX
+        pop AX
+
+        ret
+    endp
+
+    ; Desenha os labels do tabuleiro
+    ; CONDICAO INICIAL:
+    ;   AX = Valor inicial dos labels
+    ;   BX = Orientacao, 0 se for linhas e 1 se for colunas
+    DRAW_LABELS proc
+
+        push CX
+        push DX
+
+        xor DX, DX
+        mov DH, 1
+        call SET_CURSOR
+
+        xor DX, DX
+
+        cmp BX, 0
+        jz Y_LABELS
+
+        cmp BX, 1
+        jz X_LABELS
+
+        Y_LABELS:
+        push AX
+        call GET_BOARD_HEIGHT
+        mov DH, 1
+        mov CX, AX
+        pop AX
+        jmp DRAW
+
+        X_LABELS:
+        push AX
+        call GET_BOARD_WIDTH
+        mov DL, 1
+        mov CX, AX
+        pop AX
+        jmp DRAW
+
+        DRAW:
+
+        call SET_CURSOR
+
+        push DX
+        mov DX, AX
+        call PRINT_CHAR
+        pop DX
+
+        cmp BX, 0
+        jz INC_DH
+
+        cmp BX, 1
+        jz INC_DL
+
+        INC_DH:
+        inc DH
+        jmp NEXT_LABEL
+
+        INC_DL:
+        inc DL
+        jmp NEXT_LABEL
+
+        NEXT_LABEL:
+        inc AX
+
+        loop DRAW
+
+        pop DX
+        pop CX
+
+        ret
+    endp
+
     START_VIDEO_MODE proc
 
         push AX
@@ -669,7 +848,6 @@
         mov AL, 01H    ;define formato cursor
         int 10H
 
-        mov DX, 0FFFFH
         pop AX
         ret
     endp
@@ -678,13 +856,17 @@
         mov AX, @DATA
         mov DS, AX
         
-        MAIN_LOOP:
+        START_SCREEN_LOOP:        
         call START_VIDEO_MODE
-        call MAIN_SCREEN
+        call START_SCREEN
         call VALIDATE_USER_INPUT
 
         cmp AX, 0
-        jz MAIN_LOOP
+        jz START_SCREEN_LOOP
+
+        GAME_LOOP:
+        call DRAW_BOARD
+        ;call START_GAME
 
         mov al, 0h
         mov ah, 4ch
