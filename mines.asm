@@ -63,12 +63,12 @@
     ; ============= VARIAVEIS JOGO ============= ;
 
     INITIAL_LINE_LABEL EQU 'A'
-    INITIAL_COL_LABEL EQU '0'
+    INITIAL_COL_LABEL EQU 1
 
     possible_x_moves db -1, 0, 1, -1, 1, -1, 0, 1
     possible_y_moves db -1, -1, -1, 0, 0, 1, 1, 1
 
-    ; vetor onde serão feitas as operacoes logicas do jogo
+    ; vetor onde ser?o feitas as operacoes logicas do jogo
     logical_board db MAX_BOARD_SIZE dup(0)
 
     uncovered_blocks dw ?
@@ -230,8 +230,8 @@
         push CX
         push DX    
 
-        call PRINT_ASCII_TITLE
-        call PRINT_AUTHORS
+        ;call PRINT_ASCII_TITLE
+        ;call PRINT_AUTHORS
         call PRINT_CONFIGURATIONS
 
         call GET_GAME_CONFIGS  
@@ -704,7 +704,7 @@
         MOV AX, 0 
 
         mov BX, offset uncovered_blocks
-        mov [BX], AX                ; guarda número de blocos já descobertos, comeca vazio
+        mov [BX], AX                ; guarda n?mero de blocos j? descobertos, comeca vazio
 
         mov BX, offset marked_bombs
         mov [BX], AX
@@ -779,7 +779,7 @@
         push DX
 
         xor DX, DX
-        mov DH, 1
+        mov DH, 2
         call SET_CURSOR
 
         xor DX, DX
@@ -793,20 +793,11 @@
         Y_LABELS:
         push AX
         call GET_BOARD_HEIGHT
-        mov DH, 1
+        mov DH, 2
         mov CX, AX
         pop AX
-        jmp DRAW
 
-        X_LABELS:
-        push AX
-        call GET_BOARD_WIDTH
-        mov DL, 1
-        mov CX, AX
-        pop AX
-        jmp DRAW
-
-        DRAW:
+        DRAW_Y:
 
         call SET_CURSOR
 
@@ -815,24 +806,66 @@
         call PRINT_CHAR
         pop DX
 
-        cmp BX, 0
-        jz INC_DH
-
-        cmp BX, 1
-        jz INC_DL
-
-        INC_DH:
         inc DH
-        jmp NEXT_LABEL
-
-        INC_DL:
-        inc DL
-        jmp NEXT_LABEL
-
-        NEXT_LABEL:
         inc AX
 
-        loop DRAW
+        loop DRAW_Y
+        jmp END_DRAW
+
+        X_LABELS:
+        push AX
+        call GET_BOARD_WIDTH
+        mov DH, 1
+        mov DL, 1
+        mov CX, AX
+        pop AX
+
+        DRAW_X:
+        call SET_CURSOR
+
+        push DX
+        push BX
+        push AX
+        push CX
+
+        mov CX, AX
+
+        mov BX, 10
+
+        DIV_LOOP:
+        xor DX, DX
+        div BX
+
+        add DL, '0' 
+        call PRINT_CHAR
+
+        cmp AX, 0
+        jz NEXT_LABEL_X
+
+        push CX
+        push DX
+
+        xor DX, DX
+        mov DH, 0
+        mov DL, CL
+        call SET_CURSOR
+        pop DX        
+        pop CX
+
+        jmp DIV_LOOP
+
+        NEXT_LABEL_X:
+        pop CX
+        pop AX
+        pop BX
+        pop DX
+
+        inc DL
+        inc AX
+
+        loop DRAW_X
+
+        END_DRAW:
 
         pop DX
         pop CX
@@ -873,4 +906,6 @@
         int 21h
         
     end main
+    
+
     
