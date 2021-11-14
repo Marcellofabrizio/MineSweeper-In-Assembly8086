@@ -78,6 +78,12 @@
     game_over dw 0      ; 0 - jogo em andamento, 1 - jogo terminou
     marked_bombs DW 0   ; numero de bombas marcadas
 
+    ; esta variavel e a semente que vai ser utilizada para a geracao de numeros aleatorios 
+    ; com o gerador congruente linear
+    prev_seed_lcg dw 1664
+    LCG_MULTIPLIER EQU 21   ; multiplicador para o LCG
+    LCG_INCREMENT EQU 13    
+
     ; =========== VARI?VEIS GERAIS =========== ;
     
     BCK equ 8
@@ -682,7 +688,7 @@
     START_GAME proc
 
         call SET_INITIAL_GAME_STATE
-        call SET_INITIAL_BOARD
+        call SET_LOGIC_BOARD
 
         ret
     endp
@@ -721,24 +727,63 @@
         ret
     endp
 
-    SET_INITIAL_BOARD proc
+    SET_LOGIC_BOARD proc
 
+        PUSH AX
         push BX
         push CX
         push DX
 
-        call SET_LOGICAL_BOARD
+
 
         pop DX
         POP CX
         pop BX
+        pop AX
 
         ret
     endp
 
-    SET_LOGICAL_BOARD proc
 
+    ; Gera um n?mero pseudo-aleat?rio utilizando o algoritmo
+    ; Gerador congruente linear(https://pt.wikipedia.org/wiki/Geradores_congruentes_lineares)
+    ;
+    ;   Algoritmo: (a * Xi-1 + c) mod m, onde
+    ;               a eh o multiplicador 0 < a < m
+    ;               Xi-1 eh a semente anterior, ou seja, o ultimo num aleatorio gerado
+    ;               c eh o incremento
+    ;               m eh o espaco para geracao dos numeros
+    ;
+    ; CONDICAO INICIAL:
+    ;   AX = Espaco para geracao dos numeros
+    ; CONDICAO DE SAIDA:
+    ;   AX = Numero aleatorio gerado
+    LCG proc
 
+        push BX
+        push CX
+        PUSH DX
+
+        mov BX, AX
+        mov AX, LCG_MULTIPLIER
+        xor CX, CX
+
+        push BX
+        mov BX, offset prev_seed_lcg    ;Busca valor da ultima semente gerada
+        mov CX, [BX]                    ;
+        add CX, LCG_INCREMENT           ; Xi-1 + c
+        pop BX
+        mul CX                          ; a * Xi-1 + c
+        xor DX, DX
+        div BX                          ; Nova semente em DX
+
+        mov AX, DX
+        mov BX, offset prev_seed_lcg
+        mov [BX], AX
+
+        pop DX
+        pop CX
+        pop BX
 
         ret
     endp
