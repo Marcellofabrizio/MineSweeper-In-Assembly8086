@@ -70,6 +70,7 @@
 
     ; vetor onde ser?o feitas as operacoes logicas do jogo
     logical_board db MAX_BOARD_SIZE dup(0)
+    BOMB EQU 0Ah
 
     uncovered_blocks dw ?
     board_size dw ?
@@ -658,7 +659,7 @@
         ret
     endp
 
-    ; Retorna opCAo de configura??o solicitada
+    ; Retorna opCAo de configuracao solicitada
     ; CONDICAO DE ENTRADA:
     ;   AX = Posicao da opcao que se deseja buscar
     ;
@@ -734,7 +735,36 @@
         push CX
         push DX
 
+        call GET_NUM_MINES
+        mov CX, AX
 
+        SET_BOMB_LOOP:
+        call SET_BOMB
+        loop SET_BOMB_LOOP
+
+        call GET_BOARD_HEIGHT
+        mov CX, AX
+
+        HEIGHT_LOOP:        ; Iteracao sobre as linhas do tabuleiro
+
+        push CX        
+
+        dec CX
+        Mov DL, CL          ; seta coordenada Y em DL
+
+        call GET_BOARD_WIDTH
+        mov CX, AX
+
+        WIDTH_LOOP:         ; Iteracao sobre as colunas
+
+        push CX
+
+        dec CX
+        mov DH, CL          ; Seta coordenada X em DH
+
+        ;Com X e Y em DX, agora se percore a area ao redor da posicao para setar
+        ;o numero de minas ao redor de Tab[x, y] 
+        call SET_BOMBS_GRID
 
         pop DX
         POP CX
@@ -744,6 +774,129 @@
         ret
     endp
 
+    ; Seta uma bomba em uma posicao aleatoria do vetor do campo logico
+    SET_BOMB proc 
+
+        push AX
+        push BX
+        push DX
+        push DI
+
+        mov BX, offset board_size
+        mov AX, [BX]
+        mov BX, AX
+
+        SET_LOOP:
+        call LCG
+        mov DX, AX
+        HAS_BOMBS_TO_PLANT_LOOP:
+        push BX
+
+        mov DI, DX              ; Seta DI como indice aleatorio no  tabuleir
+        mov BX, offset logical_board
+        mov AX, [BX+DI]
+
+        cmp AX, BOMB            ; Verifica se posicao possui uma bomba
+        jnz PUT_BOMB            ; se nao tiver bomba, planta
+
+        pop BX
+        inc DX
+        mov DI, DX
+
+        cmp BX, DX              ; Verifica se não passou do limite do campo
+        jna HAS_BOMBS_TO_PLANT_LOOP
+
+        mov DX, 0
+        jmp SET_BOMB_LOOP
+
+        PUT_BOMB:
+        pop BX
+        
+        mov BX, offset logical_board
+        mov AX, BOMB
+        mov [BX+DI], AX
+        mov BX, offset prev_seed_lcg
+        mov [BX], DX
+
+        pop DI
+        pop DX
+        pop BX
+        pop AX
+
+        ret
+    endp
+
+    ; Seta o numero de bombas ao redor da posicao tab[x, y]
+    ; CONDICAO INICIAL:
+    ;   DH = Coordenada X no tabuleiro
+    ;   DL = Coordenada Y no tabuleiro
+    SET_BOMBS_GRID proc
+
+
+
+        ret
+    endp
+
+    HAS_BOMB_IN_POSITION proc
+
+
+
+        ret
+    endp
+
+    ; Retorna o valor da posicao X, Y no tabuleiro logico
+    ; CONDICAO INICIAL:
+    ;   DH = Coordenada X
+    ;   DL = Coordenada Y
+    ; CONDICAO DE SAIDA:
+    ;   AX = Valor de TabLogico[X, y]
+    GET_POSITION_VALUE proc
+
+        push BX
+        push DX
+        push DI
+
+
+
+        pop DI
+        pop DX
+        pop BX
+
+        ret
+    endp
+
+    ; Verifica se posicao em X, Y esta dentro nos limites do tabuleiro 
+    ;   DH = Coordenada X
+    ;   DL = Coordenada Y
+    ; CONDICAO DE SAIDA:
+    ;   AX = 0 se posicao estiver fora, 1 se posicao estiver dentro
+    IS_POSITION_IN_RANGE proc
+
+        
+
+        ret
+    endp
+
+    ; Retorna o Deslocamento da coordenada X, Y no tabuleiro logico
+    ; CONDICAO INICIAL:
+    ;   DH = Coordenada X
+    ;   DL = Coordenada Y
+    ; CONDICAO DE SAIDA:
+    ;   AX = Deslocamento da posicao no tabuleiro logico
+    GET_LOGICAL_BOARD_OFFSET proc
+
+        push BX
+        xor BX, BX
+
+        call GET_BOARD_WIDTH
+        mul DL              ; Multiplica coordenada Y pelo numero de colunas
+        mov BL, DH
+        add AX, BX
+
+        pop BX
+
+        ret
+    endp
 
     ; Gera um n?mero pseudo-aleat?rio utilizando o algoritmo
     ; Gerador congruente linear(https://pt.wikipedia.org/wiki/Geradores_congruentes_lineares)
@@ -764,19 +917,20 @@
         push CX
         PUSH DX
 
-        mov BX, AX
-        mov AX, LCG_MULTIPLIER
+        mov BX, AX                      
+        mov AX, LCG_MULTIPLIER          ; AX eh o multiplicador
         xor CX, CX
 
         push BX
-        mov BX, offset prev_seed_lcg    ;Busca valor da ultima semente gerada
+        mov BX, offset prev_seed_lcg    ; Valor da ultima semente gerada
         mov CX, [BX]                    ;
-        add CX, LCG_INCREMENT           ; Xi-1 + c
+        add CX, LCG_INCREMENT           ; CX = Xi-1 + c
         pop BX
-        mul CX                          ; a * Xi-1 + c
+        mul CX                          ; AX = a * (Xi-1 + c)
         xor DX, DX
-        div BX                          ; Nova semente em DX
-
+        
+        div BX                          ; Divide valor gerado pelo tamanho do campo
+                                        ; e salva valor gerado em DX
         mov AX, DX
         mov BX, offset prev_seed_lcg
         mov [BX], AX
