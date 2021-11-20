@@ -1,5 +1,4 @@
 
-
 .model small
 
 .stack 100H
@@ -85,6 +84,15 @@
     LCG_MULTIPLIER EQU 21   ; multiplicador para o LCG
     LCG_INCREMENT EQU 13    
 
+    EMPTY_VALUE EQU '?'
+
+    bombs_in_grid_tmp db 0
+
+    hidden_line db 40 dup (254)
+
+    flagged_bombs_counter db 'BOMBAS MARCADAS'
+    FLAGGED_BOMBS_COUNTER_STR_LEN EQU 12
+
     ; =========== VARI?VEIS GERAIS =========== ;
     
     BCK equ 8
@@ -128,6 +136,40 @@
         pop AX     
         ret  
     endp   
+
+    PRINT_INT proc
+
+        push AX      ; Salvar registradores utilizados na proc
+        push BX
+        push CX
+        push DX 
+
+        mov BX, 10   ; divis?es sucessivas por 10
+        xor CX, CX   ; contador de d?gitos
+
+        LOOP_1:
+        xor DX, DX   ; zerar DX pois o dividendo ? DXAX
+        div BX       ; divis?o para separar o d?gito em DX
+
+        push DX      ; empilhar o d?gito
+        inc CX       ; incrementa o contador de d?gitos
+
+        cmp AX, 0    ; AX chegou a 0?
+        jnz LOOP_1 ; enquanto AX diferente de 0 salte para LACO_DIV
+
+        LOOP_2:   
+        pop DX       ; desempilha o d?gito    
+        add DL, '0'  ; converter o d?gito para ASCII
+        call PRINT_CHAR              
+        loop LOOP_2    ; decrementa o contador de d?gitos
+
+        pop DX       ; Restaurar registradores utilizados na proc
+        pop CX
+        pop BX
+        pop AX
+
+        ret
+    endp
 
     DELETE_CHAR proc
         push AX
@@ -691,6 +733,9 @@
         call SET_INITIAL_GAME_STATE
         call SET_LOGIC_BOARD
 
+        call SET_BOARD_VISUAL
+
+
         ret
     endp
 
@@ -764,7 +809,14 @@
 
         ;Com X e Y em DX, agora se percore a area ao redor da posicao para setar
         ;o numero de minas ao redor de Tab[x, y] 
-        call SET_BOMBS_GRID
+        call SET_BOMB_GRID
+
+        pop CX
+
+        loop WIDTH_LOOP
+        POP CX
+
+        loop HEIGHT_LOOP
 
         pop DX
         POP CX
@@ -803,7 +855,7 @@
         inc DX
         mov DI, DX
 
-        cmp BX, DX              ; Verifica se não passou do limite do campo
+        cmp BX, DX              ; Verifica se n?o passou do limite do campo
         jna HAS_BOMBS_TO_PLANT_LOOP
 
         mov DX, 0
@@ -830,16 +882,81 @@
     ; CONDICAO INICIAL:
     ;   DH = Coordenada X no tabuleiro
     ;   DL = Coordenada Y no tabuleiro
-    SET_BOMBS_GRID proc
+    SET_BOMB_GRID proc
+
+        push CX
+        push DX
+        push DI
+
+        call HAS_BOMB
+        cmp AX, 0
+        jz SET_BOMBS_GRID_END
+
+        mov CX, 8               ;   Numero possiveis
+
+        BLOCKS_LOOP:
 
 
+        push DX
+        mov DI, CX
 
+        mov BX, offset possible_x_moves
+        mov AX, [BX+DI]
+        add DH, AL
+
+        mov BX, offset possible_y_moves
+        mov AX, [BX+DI]
+        add DL, AL
+
+        call HAS_BOMB_IN_POSITION
+
+        push DX
+        mov BX, offset bombs_in_grid_tmp
+        mov DX, [BX]
+        add AX, DX
+        mov [BX], AX
+        pop DX
+        
+        pop DX
+        loop BLOCKS_LOOP
+        
+        push DI
+        mov BX, offset bombs_in_grid_tmp
+        mov CX, [BX]
+
+        mov BX, offset logical_board
+        call GET_LOGICAL_BOARD_OFFSET
+        mov DI, AX
+
+        mov [BX+DI], CX
+        pop DI
+
+        SET_BOMBS_GRID_END:
+
+        pop DI
+        pop DX
+        pop CX
         ret
     endp
 
+    ; Verifica a presenca de uma bomba na posicao
+    ; CONDICAO INICIAL:
+    ;   DH = Coordenada X
+    ;   DL = COordenada Y
     HAS_BOMB_IN_POSITION proc
 
+        call GET_POSITION_VALUE
 
+        cmp AL, BOMB
+        jz HAS_BOMB
+
+        mov AX, 0
+        jmp HAS_BOMB_IN_POSITION_END
+
+        HAS_BOMB:
+        mov AX, 1
+
+        HAS_BOMB_IN_POSITION_END:
 
         ret
     endp
@@ -856,7 +973,23 @@
         push DX
         push DI
 
+        call IS_POSITION_IN_RANGE
+        cmp AX, 0
+        jz PLACE_EMPTY
 
+
+        call GET_LOGICAL_BOARD_OFFSET
+
+        mov BX, offset logical_board
+        mov DI, AX
+
+        mov AX, [BX+DI]
+        jmp GET_POSITION_VALUE_END
+
+        PLACE_EMPTY:
+        mov AX, EMPTY_VALUE
+
+        GET_POSITION_VALUE_END:
 
         pop DI
         pop DX
@@ -872,8 +1005,30 @@
     ;   AX = 0 se posicao estiver fora, 1 se posicao estiver dentro
     IS_POSITION_IN_RANGE proc
 
+        call GET_BOARD_HEIGHT
         
+        dec AX       ; Desconta deslocamento do topo       
 
+        cmp DL, AL      ; Compara se casa est? no limite de colunas
+        ja INVALID_POSITION
+
+        call GET_BOARD_WIDTH
+
+        dec AX       ; Desconta deslocamento a esquerda
+
+        cmp DH, AL
+        ja INVALID_POSITION
+
+        jmp VALID_POSITION
+
+        INVALID_POSITION:
+        mov AX, 0
+        jmp END_POSITION_VALIDATION
+
+        VALID_POSITION:
+        mov AX, 1
+
+        END_POSITION_VALIDATION:
         ret
     endp
 
@@ -942,7 +1097,7 @@
         ret
     endp
 
-    DRAW_BOARD proc
+    SET_BOARD_VISUAL proc
 
         push AX
         push BX
@@ -959,6 +1114,66 @@
         mov AX, INITIAL_COL_LABEL
         mov BX, 1
         call DRAW_LABELS
+
+        call DRAW_BOARD
+
+        pop DX
+        pop CX
+        pop BX
+        pop AX
+
+        ret
+    endp
+
+    DRAW_BOARD proc
+
+        push AX
+        push BX
+        push CX
+        push DX
+        push DI
+
+        call GET_BOARD_HEIGHT
+        mov CX, AX
+
+        call GET_BOARD_WIDTH
+
+        DRAW_LINE_LOOP:
+
+        push CX
+
+        dec CL
+        mov DL, CL
+        mov CX, AX
+
+        call DRAW_LINE
+
+        pop CX
+
+        loop DRAW_LINE_LOOP
+
+        pop DI
+        pop DX
+        pop CX
+        pop BX
+        pop AX
+
+        ret
+    endp
+
+    DRAW_LINE proc
+
+
+        push AX
+        push BX
+        push CX
+        push DX
+
+        mov AX, offset hidden_line
+        mov BX, 0F7H
+
+        mov DH, 0
+        call WRITE_IN_VIDEO_MEM
 
         pop DX
         pop CX
@@ -991,8 +1206,14 @@
 
         Y_LABELS:
         push AX
+        call GET_BOARD_WIDTH
+        mov DH, 0
+        mov DL, AL
+        inc DL
+        pop AX
+
+        push AX
         call GET_BOARD_HEIGHT
-        mov DH, 2
         mov CX, AX
         pop AX
 
@@ -1014,9 +1235,15 @@
         X_LABELS:
         push AX
         call GET_BOARD_WIDTH
-        mov DH, 1
-        mov DL, 1
         mov CX, AX
+        pop AX
+
+        push AX
+        call GET_BOARD_HEIGHT
+        mov DH, AL
+        inc DH
+
+        mov DL, 0
         pop AX
 
         DRAW_X:
@@ -1045,8 +1272,15 @@
         push DX
 
         xor DX, DX
-        mov DH, 0
+
+        push AX
+        call GET_BOARD_HEIGHT
+        mov DH, AL
+
+        pop AX
+
         mov DL, CL
+        dec DL
         call SET_CURSOR
         pop DX        
         pop CX
@@ -1072,12 +1306,119 @@
         ret
     endp
 
+    DRAW_FLAG_COUNTER proc
+
+        push AX
+        push BX
+        push CX
+        push DX
+
+        call GET_BOARD_HEIGHT
+        inc AX
+        inc AX
+        inc AX
+        inc AX
+
+        xor DX, DX
+
+        mov DL, AL
+
+        mov AX, offset flagged_bombs_counter
+        mov BX, BLUE
+        mov CX, FLAGGED_BOMBS_COUNTER_STR_LEN
+
+        call WRITE_IN_VIDEO_MEM
+
+        pop DX
+        pop CX
+        pop BX
+        pop AX
+
+        ret
+    endp
+
+    DRAW_BLOCK proc
+
+        push BX
+        push CX
+        push ES
+        push SI
+
+        push AX
+
+        mov AX, VIDEO_MEM_START
+        mov ES, AX
+
+        pop AX
+
+        push AX
+        call GET_VIDEO_OFFSET
+        mov BX, AX
+        pop AX
+
+        mov ES:[BX], AX
+
+        pop SI
+        pop ES
+        pop CX
+        pop BX
+
+        ret
+    endp
+
+    SET_FLAG_COUNTER proc
+
+
+        push AX
+        push BX
+        push CX
+        push DX
+
+        call GET_BOARD_HEIGHT
+        inc AX
+        inc AX
+        inc AX
+        inc AX
+        
+        mov DH, FLAGGED_BOMBS_COUNTER_STR_LEN
+        mov DL, AL
+        mov CX, 3
+        mov BX, AX
+
+        push DX
+
+        SET_COUNTER_LOOP:
+        call GET_VIDEO_OFFSET
+        call DRAW_BLOCK
+
+        inc DL
+        loop SET_COUNTER_LOOP
+
+        pop DX
+
+        mov DL, FLAGGED_BOMBS_COUNTER_STR_LEN
+        mov DH, BL
+
+        call SET_CURSOR
+
+        mov BX, offset flagged_bombs_counter
+        mov AX, [BX]
+        mov BX, L_GREEN
+
+        pop DX
+        pop CX
+        pop BX
+        pop AX
+
+        ret
+    endp
+
     START_VIDEO_MODE proc
 
         push AX
         
         xor AX, AX
-        mov AL, 01H    ;define formato cursor
+        mov AL, VIDEO_MODE    ;define formato cursor
         int 10H
 
         pop AX
@@ -1097,12 +1438,11 @@
         jz START_SCREEN_LOOP
 
         GAME_LOOP:
-        call DRAW_BOARD
-        ;call START_GAME
+        call START_GAME
 
-        mov al, 0h
-        mov ah, 4ch
-        int 21h
+        ;mov al, 0h
+        ;mov ah, 4ch
+        ;int 21h
         
     end main
     
