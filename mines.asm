@@ -76,7 +76,7 @@
 
     game_result dw 0    ; 0 - perdeu, 1 - ganhou, so sera valido se game_over = 1
     game_over dw 0      ; 0 - jogo em andamento, 1 - jogo terminou
-    marked_bombs DW 0   ; numero de bombas marcadas
+    marked_bombs dw 0   ; numero de bombas marcadas
 
     ; esta variavel e a semente que vai ser utilizada para a geracao de numeros aleatorios 
     ; com o gerador congruente linear
@@ -91,7 +91,7 @@
     hidden_line db 40 dup (254)
 
     flagged_bombs_counter db 'BOMBAS MARCADAS'
-    FLAGGED_BOMBS_COUNTER_STR_LEN EQU 12
+    FLAGGED_BOMBS_COUNTER_STR_LEN EQU 15
 
     ; =========== VARI?VEIS GERAIS =========== ;
     
@@ -1116,6 +1116,8 @@
         call DRAW_LABELS
 
         call DRAW_BOARD
+        
+        call DRAW_FLAG_COUNTER
 
         pop DX
         pop CX
@@ -1324,10 +1326,11 @@
         mov DL, AL
 
         mov AX, offset flagged_bombs_counter
-        mov BX, BLUE
+        mov BX, WHITE
         mov CX, FLAGGED_BOMBS_COUNTER_STR_LEN
 
         call WRITE_IN_VIDEO_MEM
+        call SET_FLAG_COUNTER
 
         pop DX
         pop CX
@@ -1377,15 +1380,12 @@
         call GET_BOARD_HEIGHT
         inc AX
         inc AX
-        inc AX
-        inc AX
         
         mov DH, FLAGGED_BOMBS_COUNTER_STR_LEN
         mov DL, AL
         mov CX, 3
         mov BX, AX
-
-        push DX
+        mov AX, 00H
 
         SET_COUNTER_LOOP:
         call GET_VIDEO_OFFSET
@@ -1394,16 +1394,16 @@
         inc DL
         loop SET_COUNTER_LOOP
 
-        pop DX
-
         mov DL, FLAGGED_BOMBS_COUNTER_STR_LEN
         mov DH, BL
 
         call SET_CURSOR
 
-        mov BX, offset flagged_bombs_counter
+        mov BX, offset marked_bombs
         mov AX, [BX]
-        mov BX, L_GREEN
+        mov BX, RED
+
+        call PRINT_INT
 
         pop DX
         pop CX
