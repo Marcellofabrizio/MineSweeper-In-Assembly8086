@@ -90,8 +90,12 @@
 
     hidden_line db 40 dup (254)
 
-    flagged_bombs_counter db 'BOMBAS MARCADAS'
-    FLAGGED_BOMBS_COUNTER_STR_LEN EQU 15
+    flagged_bombs_counter db 'BOMBAS MARCADAS  '
+    FLAGGED_BOMBS_COUNTER_STR_LEN EQU 17
+
+    user_input_line db 30
+    user_input_cols db 0, 3, 6
+    user_input_options dw 3 dup (?)
 
     ; =========== VARI?VEIS GERAIS =========== ;
     
@@ -189,6 +193,29 @@
         ret
     endp
 
+    ; Limpa a linha especificada
+    ; CONDICAO INICIAL:
+    ;   AX = Linha para ser limpada
+    CLEAR_LINE proc
+
+        push DX
+
+        xor DX, DX
+
+        mov DH, AL
+        mov DL, 39
+        mov CX, 39
+
+        CLEAR_LOOP:
+        call SET_CURSOR
+        call DELETE_CHAR
+        dec DL
+        loop CLEAR_LOOP
+
+        pop DX
+
+        ret
+    endp
 
     LINE_BREAK proc
         push DX
@@ -467,12 +494,55 @@
         
         call READ_USER_INPUT
 
+        mov BX, offset config_options
         call SAVE_USER_INPUT
 
         inc DI        
         loop INPUT
 
         pop BX
+        pop DX
+        pop AX
+
+        ret
+    endp
+
+    GET_USER_COMMAND proc
+
+        push AX
+        push DX
+
+        push offset user_input_options
+
+        mov DI, 0
+        mov DX, 0
+        mov CX, 3
+
+        call GET_BOARD_HEIGHT
+        inc AX
+        inc AX
+        inc AX
+        inc AX
+
+        mov DH, AL
+
+        INPUT_COMMAND_LOOP:
+
+        mov BX, offset user_input_cols
+        mov AX, [BX+DI]
+        mov DL, AL
+
+        inc BX
+
+        call SET_CURSOR
+        call READ_USER_INPUT
+
+        mov BX, offset user_input_options
+        call SAVE_USER_INPUT
+
+        inc DI
+        loop INPUT_COMMAND_LOOP
+
         pop DX
         pop AX
 
@@ -516,7 +586,7 @@
         cmp AL, BCK  ;Verifica se pressionou backspace
         jz DELETE
 
-        cmp DX, 3
+        cmp DX, 2
         jz READ_LOOP
 
         cmp AL, '0'            
@@ -573,8 +643,6 @@
     ; CONDICA DE ENTRADA:
     ;   DI = Campo atual que se deseja salvar a entrada
     SAVE_USER_INPUT proc
-
-        mov BX, offset config_options
 
         push DI
         push AX
@@ -732,9 +800,7 @@
 
         call SET_INITIAL_GAME_STATE
         call SET_LOGIC_BOARD
-
         call SET_BOARD_VISUAL
-
 
         ret
     endp
@@ -1319,7 +1385,6 @@
         inc AX
         inc AX
         inc AX
-        inc AX
 
         xor DX, DX
 
@@ -1328,8 +1393,8 @@
         mov AX, offset flagged_bombs_counter
         mov BX, WHITE
         mov CX, FLAGGED_BOMBS_COUNTER_STR_LEN
-
         call WRITE_IN_VIDEO_MEM
+
         call SET_FLAG_COUNTER
 
         pop DX
@@ -1380,15 +1445,17 @@
         call GET_BOARD_HEIGHT
         inc AX
         inc AX
+        inc AX
+        mov BX, AX
         
         mov DH, FLAGGED_BOMBS_COUNTER_STR_LEN
-        mov DL, AL
+        mov DL, BL
         mov CX, 3
-        mov BX, AX
-        mov AX, 00H
 
         SET_COUNTER_LOOP:
         call GET_VIDEO_OFFSET
+        mov DX, AX
+        mov AX, 00H
         call DRAW_BLOCK
 
         inc DL
@@ -1409,6 +1476,19 @@
         pop CX
         pop BX
         pop AX
+
+        ret
+    endp
+
+    IS_GAME_OVER proc
+
+        push BX
+
+        mov BX, offset game_over
+        mov AX, [BX]
+        cmp AX, 1
+
+        pop BX
 
         ret
     endp
@@ -1437,8 +1517,27 @@
         cmp AX, 0
         jz START_SCREEN_LOOP
 
-        GAME_LOOP:
+        MAIN_LOOP:
         call START_GAME
+
+        GAME_LOOP:
+        call IS_GAME_OVER
+        jz GAME_IS_OVER
+
+        call GET_USER_COMMAND
+
+        call GET_BOARD_HEIGHT
+        inc AX
+        inc AX
+        inc AX
+        inc AX
+
+        call CLEAR_LINE
+        jmp GAME_LOOP
+
+        GAME_IS_OVER:
+        mov BX, offset game_result
+        mov AX, [BX]
 
         ;mov al, 0h
         ;mov ah, 4ch
