@@ -1391,7 +1391,7 @@
         mov DL, AL
 
         mov AX, offset flagged_bombs_counter
-        mov BX, WHITE
+        mov BX, RED
         mov CX, FLAGGED_BOMBS_COUNTER_STR_LEN
         call WRITE_IN_VIDEO_MEM
 
