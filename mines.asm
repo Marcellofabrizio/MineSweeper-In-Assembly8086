@@ -94,8 +94,13 @@
     FLAGGED_BOMBS_COUNTER_STR_LEN EQU 17
 
     user_input_line db 30
-    user_input_cols db 0, 3, 6
-    user_input_options dw 3 dup (?)
+    user_command_col db 0
+    user_command_option dw 1 dup (?)
+    command_coordinates dw 2 dup (?)
+    command_coordinates_cols db 2, 5
+
+    MARK_COMMAND EQU 'M'
+    UNCOVER_COMMAND EQU 'U'
 
     ; =========== VARI?VEIS GERAIS =========== ;
     
@@ -512,11 +517,11 @@
         push AX
         push DX
 
-        push offset user_input_options
+        push offset user_command_option
 
         mov DI, 0
         mov DX, 0
-        mov CX, 3
+        mov CX, 1
 
         call GET_BOARD_HEIGHT
         inc AX
@@ -528,7 +533,49 @@
 
         INPUT_COMMAND_LOOP:
 
-        mov BX, offset user_input_cols
+        mov BX, offset user_command_col
+        mov AX, [BX+DI]
+        mov DL, AL
+
+        inc BX
+
+        call SET_CURSOR
+        call READ_USER_COMMAND
+
+        mov BX, offset user_command_option
+        call SAVE_USER_INPUT
+
+        inc DI
+        loop INPUT_COMMAND_LOOP
+
+        pop DX
+        pop AX
+
+        ret
+    endp
+
+    GET_COMMAND_COORDINATES proc
+
+        push AX
+        push DX
+
+        push offset command_coordinates
+
+        mov DI, 0
+        mov DX, 0
+        mov CX, 2
+
+        call GET_BOARD_HEIGHT
+        inc AX
+        inc AX
+        inc AX
+        inc AX
+
+        mov DH, AL
+
+        INPUT_COORDINATES_LOOP:
+
+        mov BX, offset command_coordinates_cols
         mov AX, [BX+DI]
         mov DL, AL
 
@@ -537,11 +584,11 @@
         call SET_CURSOR
         call READ_USER_INPUT
 
-        mov BX, offset user_input_options
+        mov BX, offset command_coordinates
         call SAVE_USER_INPUT
 
         inc DI
-        loop INPUT_COMMAND_LOOP
+        loop INPUT_COORDINATES_LOOP
 
         pop DX
         pop AX
@@ -635,6 +682,182 @@
         pop DX
         pop CX
         pop BX    
+        ret
+    endp
+
+    READ_USER_COMMAND proc
+        push BX
+        push CX
+        push DX 
+
+        xor AX, AX 
+        xor CX, CX
+        xor DX, DX ; contador de caracteres
+        mov BX, 10
+                    
+        SAVE_COMM_LOOP:
+        push AX    ; salvando o acumulador
+        READ_COMM_LOOP:       
+        call READ_CHAR           ; ler o caractere
+         
+        cmp AL, CR              ; verifica se eh ENTER
+        jz END_READ_COMM ; je
+
+        cmp AL, BCK  ;Verifica se pressionou backspace
+        jz DELETE_COMM
+
+        cmp DX, 1
+        jz READ_COMM_LOOP
+
+        cmp AL, 'A'            
+        jb READ_COMM_LOOP
+      
+        cmp AL, 'Z'
+        ja READ_COMM_LOOP
+
+        SAVE_COMMAND:
+
+        push DX                 
+        mov DL, AL
+        call PRINT_CHAR
+        pop DX
+
+        mov CL, AL
+        sub CL, '0'
+       
+        pop AX
+        push DX
+        mul BX
+        add AX,CX
+        pop DX
+        
+        inc DX
+        jmp SAVE_COMM_LOOP
+
+        DELETE_COMM:        
+                
+        pop AX
+        cmp DX,0
+        jz SAVE_COMM_LOOP
+
+        dec DX 
+        div BL 
+        xor AH,AH
+
+        push AX
+        div BL
+        mov CL,AH    
+        pop AX   
+    
+        call DELETE_CHAR    
+        jmp SAVE_COMM_LOOP
+
+        END_READ_COMM: 
+        pop AX                  ; restaurando o acumulador              
+        pop DX
+        pop CX
+        pop BX    
+        ret
+    endp
+
+    VALIDATE_COMMAND_INPUT proc
+
+        push BX
+        push CX
+
+        call VALIDATE_COMMAND
+        cmp AX, 0
+        jz INVALID_COMMAND_INPUT
+
+        call VALIDATE_COMMAND_X_COORD
+        cmp AX, 0
+        jz INVALID_COMMAND_INPUT
+
+        call VALIDATE_COMMAND_Y_COORD
+        cmp AX, 0
+        jz INVALID_COMMAND_INPUT
+
+        mov AX, 1
+        jmp END_VALIDATE_COMMAND_INPUT
+
+        INVALID_COMMAND_INPUT:
+        mov AX, 0
+
+        END_VALIDATE_COMMAND_INPUT:
+        pop CX
+        pop BX
+
+        ret
+    endp
+
+    VALIDATE_COMMAND proc
+        
+        call GET_COMMAND
+        cmp AX, MARK_COMMAND
+        je VALID_COMMAND
+
+        cmp AX, UNCOVER_COMMAND
+        je VALID_COMMAND
+
+        INVALID_COMMAND:
+        mov AX, 0
+        jmp END_VALIDATE_COMMAND
+
+        VALID_COMMAND:
+        mov AX, 1
+
+        END_VALIDATE_COMMAND:
+        ret
+    endp
+
+    VALIDATE_COMMAND_X_COORD proc
+
+        push BX
+
+        call GET_BOARD_WIDTH
+        mov BX, AX
+
+        call GET_COMMAND_X_COORD
+        cmp AX, 1
+        jb INVALID_COMMAND_X_COORD
+
+        cmp AX, BX
+        ja INVALID_COMMAND_X_COORD
+
+        mov AX, 1
+        jmp END_VALIDATE_COMMAND_X_COORD
+
+        INVALID_COMMAND_X_COORD:
+        mov AX, 0
+
+        END_VALIDATE_COMMAND_X_COORD:
+        pop BX
+
+        ret
+    endp
+
+    VALIDATE_COMMAND_Y_COORD proc
+        push BX
+
+        call GET_BOARD_HEIGHT
+        mov BX, AX
+
+        call GET_COMMAND_Y_COORD
+
+        cmp AX, 0h
+        jb INVALID_COMMAND_Y_COORD
+
+        cmp AX, 13h
+        ja INVALID_COMMAND_Y_COORD    
+
+        mov AX, 1
+        jmp END_VALIDATE_COMMAND_Y_COORD
+
+        INVALID_COMMAND_Y_COORD:
+        mov AX, 0
+
+        END_VALIDATE_COMMAND_Y_COORD:
+        pop BX
         ret
     endp
 
@@ -792,6 +1015,63 @@
         pop DX
         pop DI    
         pop BX
+
+        ret
+    endp
+
+    GET_COMMAND proc
+        push CX
+        mov AX, 0
+        mov CX, offset user_command_option
+        call GET_COMMAND_OPTION
+        pop CX
+        ret
+    endp
+
+    GET_COMMAND_X_COORD proc
+        push CX
+        mov AX, 0
+        mov CX, offset command_coordinates
+        call GET_COMMAND_OPTION
+        pop CX
+        ret
+    endp
+
+    GET_COMMAND_Y_COORD proc
+        push CX
+        push DX
+        mov AX, 1
+        mov CX, offset command_coordinates
+        mov DX, 54h
+
+        call GET_COMMAND_OPTION
+
+        sub AX, DX
+
+        pop DX
+        pop CX
+        ret
+    endp
+
+    ; Recebe em CX deslocamento de qual op??o do comando quer pegar,
+    ; comando ou coordenadas
+    GET_COMMAND_OPTION proc
+
+        push BX
+        push DI    
+        push DX
+
+        mov DX, 0
+        mov BL, 2
+        mul BL
+
+        mov BX, CX
+        mov DI, AX
+        mov AX, [BX+DI]
+
+        pop DX
+        pop DI    
+        pop BX  
 
         ret
     endp
@@ -1525,6 +1805,11 @@
         jz GAME_IS_OVER
 
         call GET_USER_COMMAND
+        call GET_COMMAND_COORDINATES
+
+        call VALIDATE_COMMAND_INPUT
+        cmp AX, 1
+        jmp GAME_IS_OVER
 
         call GET_BOARD_HEIGHT
         inc AX
@@ -1539,9 +1824,9 @@
         mov BX, offset game_result
         mov AX, [BX]
 
-        ;mov al, 0h
-        ;mov ah, 4ch
-        ;int 21h
+        mov al, 0h
+        mov ah, 4ch
+        int 21h
         
     end main
     
