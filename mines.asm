@@ -1,7 +1,7 @@
 
 .model small
 
-.stack 100H
+.stack 4000H
 
 .data
 
@@ -96,8 +96,8 @@
     user_input_line db 30
     user_command_col db 0
     user_command_option dw 1 dup (?)
+    command_coordinates_cols db 3, 7
     command_coordinates dw 2 dup (?)
-    command_coordinates_cols db 2, 5
 
     MARK_COMMAND EQU 'M'
     UNCOVER_COMMAND EQU 'U'
@@ -519,7 +519,6 @@
 
         push offset user_command_option
 
-        mov DI, 0
         mov DX, 0
         mov CX, 1
 
@@ -531,10 +530,8 @@
 
         mov DH, AL
 
-        INPUT_COMMAND_LOOP:
-
         mov BX, offset user_command_col
-        mov AX, [BX+DI]
+        mov AL, [BX]
         mov DL, AL
 
         inc BX
@@ -544,9 +541,6 @@
 
         mov BX, offset user_command_option
         call SAVE_USER_INPUT
-
-        inc DI
-        loop INPUT_COMMAND_LOOP
 
         pop DX
         pop AX
@@ -636,12 +630,6 @@
         cmp DX, 2
         jz READ_LOOP
 
-        cmp AL, '0'            
-        jb READ_LOOP 
-      
-        cmp AL, '9'
-        ja READ_LOOP 
-
         push DX                 
         mov DL, AL
         call PRINT_CHAR
@@ -686,6 +674,7 @@
     endp
 
     READ_USER_COMMAND proc
+        push AX
         push BX
         push CX
         push DX 
@@ -701,7 +690,7 @@
         call READ_CHAR           ; ler o caractere
          
         cmp AL, CR              ; verifica se eh ENTER
-        jz END_READ_COMM ; je
+        je END_READ_COMM ; je
 
         cmp AL, BCK  ;Verifica se pressionou backspace
         jz DELETE_COMM
@@ -714,8 +703,6 @@
       
         cmp AL, 'Z'
         ja READ_COMM_LOOP
-
-        SAVE_COMMAND:
 
         push DX                 
         mov DL, AL
@@ -1080,7 +1067,7 @@
 
         call SET_INITIAL_GAME_STATE
         call SET_LOGIC_BOARD
-        call SET_BOARD_VISUAL
+        call SET_VISUAL_BOARD
 
         ret
     endp
@@ -1443,7 +1430,7 @@
         ret
     endp
 
-    SET_BOARD_VISUAL proc
+    SET_VISUAL_BOARD proc
 
         push AX
         push BX
@@ -1809,7 +1796,7 @@
 
         call VALIDATE_COMMAND_INPUT
         cmp AX, 1
-        jmp GAME_IS_OVER
+        je GAME_IS_OVER
 
         call GET_BOARD_HEIGHT
         inc AX
