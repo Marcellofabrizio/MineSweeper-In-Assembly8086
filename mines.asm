@@ -93,14 +93,11 @@
     flagged_bombs_counter db 'BOMBAS MARCADAS  '
     FLAGGED_BOMBS_COUNTER_STR_LEN EQU 17
 
-    user_input_line db 30
-    user_command_col db 0
-    user_command_option dw 1 dup (?)
-    command_coordinates_cols db 3, 7
-    command_coordinates dw 2 dup (?)
+    user_command_options dw 3 dup (?)
+    user_command_options_cols db 0,4,7
 
-    MARK_COMMAND EQU 'M'
-    UNCOVER_COMMAND EQU 'U'
+    MARK_COMMAND EQU 25h
+    UNCOVER_COMMAND EQU 47h
 
     ; =========== VARI?VEIS GERAIS =========== ;
     
@@ -517,48 +514,13 @@
         push AX
         push DX
 
-        push offset user_command_option
+        push offset user_command_options
 
         mov DX, 0
-        mov CX, 1
-
-        call GET_BOARD_HEIGHT
-        inc AX
-        inc AX
-        inc AX
-        inc AX
-
-        mov DH, AL
-
-        mov BX, offset user_command_col
-        mov AL, [BX]
-        mov DL, AL
-
-        inc BX
-
-        call SET_CURSOR
-        call READ_USER_COMMAND
-
-        mov BX, offset user_command_option
-        call SAVE_USER_INPUT
-
-        pop DX
-        pop AX
-
-        ret
-    endp
-
-    GET_COMMAND_COORDINATES proc
-
-        push AX
-        push DX
-
-        push offset command_coordinates
-
         mov DI, 0
-        mov DX, 0
-        mov CX, 2
+        mov CX, 3
 
+        INPUT_COMMAND:
         call GET_BOARD_HEIGHT
         inc AX
         inc AX
@@ -567,23 +529,22 @@
 
         mov DH, AL
 
-        INPUT_COORDINATES_LOOP:
-
-        mov BX, offset command_coordinates_cols
+        mov BX, offset user_command_options_cols
         mov AX, [BX+DI]
         mov DL, AL
+        call SET_CURSOR
 
         inc BX
 
-        call SET_CURSOR
         call READ_USER_INPUT
 
-        mov BX, offset command_coordinates
+        mov BX, offset user_command_options
         call SAVE_USER_INPUT
 
         inc DI
-        loop INPUT_COORDINATES_LOOP
+        loop INPUT_COMMAND
 
+        pop BX
         pop DX
         pop AX
 
@@ -666,80 +627,6 @@
         jmp SAVE_LOOP
 
         END_READ: 
-        pop AX                  ; restaurando o acumulador              
-        pop DX
-        pop CX
-        pop BX    
-        ret
-    endp
-
-    READ_USER_COMMAND proc
-        push AX
-        push BX
-        push CX
-        push DX 
-
-        xor AX, AX 
-        xor CX, CX
-        xor DX, DX ; contador de caracteres
-        mov BX, 10
-                    
-        SAVE_COMM_LOOP:
-        push AX    ; salvando o acumulador
-        READ_COMM_LOOP:       
-        call READ_CHAR           ; ler o caractere
-         
-        cmp AL, CR              ; verifica se eh ENTER
-        je END_READ_COMM ; je
-
-        cmp AL, BCK  ;Verifica se pressionou backspace
-        jz DELETE_COMM
-
-        cmp DX, 1
-        jz READ_COMM_LOOP
-
-        cmp AL, 'A'            
-        jb READ_COMM_LOOP
-      
-        cmp AL, 'Z'
-        ja READ_COMM_LOOP
-
-        push DX                 
-        mov DL, AL
-        call PRINT_CHAR
-        pop DX
-
-        mov CL, AL
-        sub CL, '0'
-       
-        pop AX
-        push DX
-        mul BX
-        add AX,CX
-        pop DX
-        
-        inc DX
-        jmp SAVE_COMM_LOOP
-
-        DELETE_COMM:        
-                
-        pop AX
-        cmp DX,0
-        jz SAVE_COMM_LOOP
-
-        dec DX 
-        div BL 
-        xor AH,AH
-
-        push AX
-        div BL
-        mov CL,AH    
-        pop AX   
-    
-        call DELETE_CHAR    
-        jmp SAVE_COMM_LOOP
-
-        END_READ_COMM: 
         pop AX                  ; restaurando o acumulador              
         pop DX
         pop CX
@@ -1007,41 +894,28 @@
     endp
 
     GET_COMMAND proc
-        push CX
         mov AX, 0
-        mov CX, offset user_command_option
         call GET_COMMAND_OPTION
-        pop CX
         ret
     endp
 
+
     GET_COMMAND_X_COORD proc
-        push CX
-        mov AX, 0
-        mov CX, offset command_coordinates
+        mov AX, 1
         call GET_COMMAND_OPTION
-        pop CX
         ret
     endp
 
     GET_COMMAND_Y_COORD proc
-        push CX
         push DX
-        mov AX, 1
-        mov CX, offset command_coordinates
+        mov AX, 2
         mov DX, 54h
-
         call GET_COMMAND_OPTION
-
         sub AX, DX
-
         pop DX
-        pop CX
         ret
     endp
 
-    ; Recebe em CX deslocamento de qual op??o do comando quer pegar,
-    ; comando ou coordenadas
     GET_COMMAND_OPTION proc
 
         push BX
@@ -1052,7 +926,7 @@
         mov BL, 2
         mul BL
 
-        mov BX, CX
+        mov BX, offset user_command_options
         mov DI, AX
         mov AX, [BX+DI]
 
@@ -1792,7 +1666,6 @@
         jz GAME_IS_OVER
 
         call GET_USER_COMMAND
-        call GET_COMMAND_COORDINATES
 
         call VALIDATE_COMMAND_INPUT
         cmp AX, 1
