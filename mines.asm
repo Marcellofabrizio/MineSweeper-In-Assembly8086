@@ -718,10 +718,10 @@
 
         call GET_COMMAND_Y_COORD
 
-        cmp AX, 0h
+        cmp AX, 1h
         jb INVALID_COMMAND_Y_COORD
 
-        cmp AX, 13h
+        cmp AX, 14h
         ja INVALID_COMMAND_Y_COORD    
 
         mov AX, 1
@@ -909,7 +909,7 @@
     GET_COMMAND_Y_COORD proc
         push DX
         mov AX, 2
-        mov DX, 54h
+        mov DX, 10h
         call GET_COMMAND_OPTION
         sub AX, DX
         pop DX
