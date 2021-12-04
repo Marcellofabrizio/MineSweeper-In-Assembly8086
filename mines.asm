@@ -89,7 +89,7 @@
     possible_y_moves db -1, -1, -1, 0, 0, 1, 1, 1
 
     ; vetor onde ser?o feitas as operacoes logicas do jogo
-    logical_board db MAX_BOARD_SIZE dup(0)
+    logical_board db MAX_BOARD_SIZE dup(?)
 
     uncovered_blocks dw ?
     board_size dw ?
@@ -129,7 +129,7 @@
     VIDEO_MODE EQU 01H             ;modo de video para tela 40x25 e texto 8x8
     VIDEO_MEM_START EQU 0B800H     ;endereco do buffer de video para modo grafico 01H
     
-    MAX_COLS EQU 60                ;maximo de colunas 40 por 2 bytes
+    MAX_COLS EQU 80                ;maximo de colunas 40 por 2 bytes
     MAX_ROWS EQU 40                ;maximo de linhas 20 por 2 bytes
 
     RED EQU 4H
@@ -320,7 +320,7 @@
     ;   DH = Coluna escrita 
     WRITE_IN_VIDEO_MEM proc 
 
-        push AX ;acho que n?o precisa, ver depois
+        push AX
         push DI
         push ES
         push SI
@@ -347,6 +347,7 @@
         pop DI
         pop AX
 
+        ret
     endp
 
     ; Calcula e retorna o deslocamento da mem?ria 
@@ -1143,7 +1144,7 @@
         jna HAS_BOMBS_TO_PLANT_LOOP
 
         mov DX, 0
-        jmp SET_BOMB_LOOP
+        jmp SET_LOOP
 
         PUT_BOMB:
         pop BX
@@ -1263,10 +1264,8 @@
 
 
         call GET_LOGICAL_BOARD_OFFSET
-
-        mov BX, offset logical_board
         mov DI, AX
-
+        mov BX, offset logical_board
         mov AX, [BX+DI]
         jmp GET_POSITION_VALUE_END
 
@@ -1285,18 +1284,19 @@
     GET_SCREEN_POSITION_VALUE proc
 
         push BX
-        push DX
         push ES
         
         call GET_VIDEO_OFFSET
+        mov BX, AX
+
         mov AX, VIDEO_MEM_START
         mov ES, AX
-        mov BX, DX
         mov AX, ES:[BX]
 
         pop ES
-        pop DX
         pop BX
+
+        ret
     endp
 
     ; Verifica se posicao em X, Y esta dentro nos limites do tabuleiro 
@@ -1473,6 +1473,13 @@
         jmp UNCOVER_END
 
         UNMARK:
+
+        call GET_COMMAND_X_COORD
+        mov DH, AL
+
+        call GET_COMMAND_Y_COORD
+        mov DL, AL
+
         mov AX, COVERED_BLOCK
         call DRAW_BLOCK
 
@@ -1622,7 +1629,7 @@
         mov BX, offset blocks
         mov DI, AX
 
-        mov AX, [BX+DI]
+        mov AX, [BX]
         pop DI
         pop BX
 
@@ -2077,9 +2084,9 @@
 
         call GET_USER_COMMAND
 
-        call VALIDATE_COMMAND_INPUT
-        cmp AX, 1
-        jnz CLEAR
+        ;call VALIDATE_COMMAND_INPUT
+        ;cmp AX, 1
+        ;jnz CLEAR
 
         call EXEC_COMMAND
 
