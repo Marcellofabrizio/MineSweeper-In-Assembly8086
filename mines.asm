@@ -32,6 +32,9 @@
     TITLE_1_STR_LEN EQU 35
     TITLE_2_STR_LEN EQU 38
 
+    victory db 'PARABENS!'
+    VICTORY_STR_LEN EQU 9
+
     ; =========== VARIVEIS CONFIGURACOES =========== ;
 
     configurations db 'CONFIGURACOES'
@@ -40,7 +43,7 @@
     mines_config db 'NUMERO DE MINAS (>=5):'
     MINES_CONFIG_STR_LEN EQU 22
 
-    board_width_config db 'LARGURA DO CAMPO [5;40]:'
+    board_width_config db 'LARGURA DO CAMPO [5;30]:'
     BOARD_WIDTH_CONFIG_STR_LEN EQU 24 
 
     board_height_config db 'ALTURA DO CAMPO [5;20]:'
@@ -52,24 +55,41 @@
     MAX_NUM_MINES EQU 5
 
     MIN_BOARD_WIDTH EQU 5
-    MAX_BOARD_WIDTH EQU 40
+    MAX_BOARD_WIDTH EQU 30
 
     MIN_BOARD_HEIGHT EQU 5
     MAX_BOARD_HEIGHT EQU 20
 
-    MAX_BOARD_SIZE EQU 800
+    MAX_BOARD_SIZE EQU 600
 
     ; ============= VARIAVEIS JOGO ============= ;
 
     INITIAL_LINE_LABEL EQU 'A'
     INITIAL_COL_LABEL EQU 1
 
+    BOMB EQU 0AH
+    EMPTY_VALUE EQU '?'
+
+    BOMB_BLOCK EQU 0040FH
+    EMPTY_BLOCK EQU 0F7B0h
+    COVERED_BLOCK EQU 0F7FEH
+    MARKED_BLOCK EQU 047FEH
+    BLOCK_NEAR_1 EQU 08131h
+    BLOCK_NEAR_2 EQU 08232h
+    BLOCK_NEAR_3 EQU 08333h
+    BLOCK_NEAR_4 EQU 08434h
+    BLOCK_NEAR_5 EQU 08535h
+    BLOCK_NEAR_6 EQU 08636h
+    BLOCK_NEAR_7 EQU 08737h
+    BLOCK_NEAR_8 EQU 08A38h
+
+    blocks dw EMPTY_BLOCK, BLOCK_NEAR_1, BLOCK_NEAR_2, BLOCK_NEAR_3, BLOCK_NEAR_4, BLOCK_NEAR_5, BLOCK_NEAR_6, BLOCK_NEAR_7, BLOCK_NEAR_8
+
     possible_x_moves db -1, 0, 1, -1, 1, -1, 0, 1
     possible_y_moves db -1, -1, -1, 0, 0, 1, 1, 1
 
     ; vetor onde ser?o feitas as operacoes logicas do jogo
     logical_board db MAX_BOARD_SIZE dup(0)
-    BOMB EQU 0Ah
 
     uncovered_blocks dw ?
     board_size dw ?
@@ -84,8 +104,6 @@
     LCG_MULTIPLIER EQU 21   ; multiplicador para o LCG
     LCG_INCREMENT EQU 13    
 
-    EMPTY_VALUE EQU '?'
-
     bombs_in_grid_tmp db 0
 
     hidden_line db 40 dup (254)
@@ -96,8 +114,8 @@
     user_command_options dw 3 dup (?)
     user_command_options_cols db 0,4,7
 
-    MARK_COMMAND EQU 25h
-    UNCOVER_COMMAND EQU 47h
+    MARK_COMMAND EQU 1Dh
+    UNCOVER_COMMAND EQU 25h
 
     ; =========== VARI?VEIS GERAIS =========== ;
     
@@ -111,7 +129,7 @@
     VIDEO_MODE EQU 01H             ;modo de video para tela 40x25 e texto 8x8
     VIDEO_MEM_START EQU 0B800H     ;endereco do buffer de video para modo grafico 01H
     
-    MAX_COLS EQU 80                ;maximo de colunas 40 por 2 bytes
+    MAX_COLS EQU 60                ;maximo de colunas 40 por 2 bytes
     MAX_ROWS EQU 40                ;maximo de linhas 20 por 2 bytes
 
     RED EQU 4H
@@ -229,6 +247,65 @@
     
         pop DX
         
+        ret
+    endp
+
+    PRESS_ANY_KEY proc
+        push AX
+        mov AH, 7
+        int 21H
+        xor AH, AH
+        pop AX
+        ret
+    endp
+
+    ; Recebe em AX n segundos para ficar esperando
+    SLEEP proc
+        push CX
+        mov CX, AX
+        SLEEP_LOOP:
+        call SLEEP_SECOND
+        loop SLEEP_LOOP
+        pop CX
+        ret
+    endp
+
+    SLEEP_SECOND proc
+        push CX
+        mov CX, 2
+        SLEEP_MILISECOND_LOOP:
+        call SLEEP_MILISECOND
+        loop SLEEP_MILISECOND_LOOP
+        pop CX
+        ret
+    endp
+
+    SLEEP_MILISECOND proc
+        push AX
+        push BX
+        push CX
+        push DX
+
+        xor CX, CX
+        xor DX, DX
+        xor AX, AX
+        int 1AH 
+        mov BX, DX
+
+        TICK_LOOP:
+        xor CX, CX
+        xor DX, DX
+        xor AX, AX
+        int 1AH
+        mov AX, BX
+        sub DX, AX
+        cmp DX, 9
+        jb TICK_LOOP
+
+        pop DX
+        pop CX
+        pop BX
+        pop AX
         ret
     endp
 
@@ -1095,17 +1172,16 @@
         push DX
         push DI
 
-        call HAS_BOMB
+        call IS_POSITION_IN_RANGE
         cmp AX, 0
         jz SET_BOMBS_GRID_END
 
         mov CX, 8               ;   Numero possiveis
+        mov DI, CX
+        dec DI
 
         BLOCKS_LOOP:
-
-
         push DX
-        mov DI, CX
 
         mov BX, offset possible_x_moves
         mov AX, [BX+DI]
@@ -1125,6 +1201,7 @@
         pop DX
         
         pop DX
+        dec DI
         loop BLOCKS_LOOP
         
         push DI
@@ -1205,6 +1282,23 @@
         ret
     endp
 
+    GET_SCREEN_POSITION_VALUE proc
+
+        push BX
+        push DX
+        push ES
+        
+        call GET_VIDEO_OFFSET
+        mov AX, VIDEO_MEM_START
+        mov ES, AX
+        mov BX, DX
+        mov AX, ES:[BX]
+
+        pop ES
+        pop DX
+        pop BX
+    endp
+
     ; Verifica se posicao em X, Y esta dentro nos limites do tabuleiro 
     ;   DH = Coordenada X
     ;   DL = Coordenada Y
@@ -1214,14 +1308,10 @@
 
         call GET_BOARD_HEIGHT
         
-        dec AX       ; Desconta deslocamento do topo       
-
         cmp DL, AL      ; Compara se casa est? no limite de colunas
         ja INVALID_POSITION
 
         call GET_BOARD_WIDTH
-
-        dec AX       ; Desconta deslocamento a esquerda
 
         cmp DH, AL
         ja INVALID_POSITION
@@ -1301,6 +1391,251 @@
         pop CX
         pop BX
 
+        ret
+    endp
+
+    ; Executa o comando dado
+    EXEC_COMMAND proc
+
+        push AX
+
+        call GET_COMMAND
+
+        cmp AX, UNCOVER_COMMAND
+        je IS_UNCOVER
+
+        IS_UNCOVER:
+
+        call GET_COMMAND_X_COORD
+        mov DL, AL
+
+        call GET_COMMAND_Y_COORD
+        mov DH, AL
+
+        call UNCOVER
+        pop AX
+        ret
+    endp
+
+    MARK proc
+
+
+        ret
+    endp
+
+    UNCOVER proc
+
+        push AX
+        push BX
+
+        call IS_POSITION_IN_RANGE
+        cmp AX, 0
+        jz UNCOVER_END
+
+        call GET_SCREEN_POSITION_VALUE
+        cmp AX, MARKED_BLOCK
+        jz UNMARK
+
+        call GET_POSITION_VALUE
+        cmp AX, BOMB
+        jz IS_BOMB
+
+        jmp REVEAL
+
+        IS_BOMB:
+        call OPEN_BOMBS
+
+        mov AX, 1
+        mov BX, offset game_over
+        mov [BX], AX
+        mov AX, 0
+        mov BX, offset game_result
+        mov [BX], AX
+
+        mov AX, 5
+        call SLEEP
+
+        jmp UNCOVER_END
+
+        REVEAL:
+        call REVEAL_BLOCK
+        call IS_GAME_WON
+        cmp AX, 1
+        jnz UNCOVER_END
+
+        mov AX, 1
+        mov BX, offset game_over
+        mov [BX], AX
+
+        mov BX, offset game_result
+        mov [BX], AX
+
+        jmp UNCOVER_END
+
+        UNMARK:
+        mov AX, COVERED_BLOCK
+        call DRAW_BLOCK
+
+        mov BX, offset marked_bombs
+        mov AX, [BX]
+        dec AX
+        mov [BX], AX
+
+        call DRAW_FLAG_COUNTER
+
+        UNCOVER_END:
+        pop BX
+        pop AX
+        ret
+    endp
+
+    OPEN_BOMBS proc
+        push AX
+        push BX
+        push CX
+        push DX
+
+        call GET_BOARD_WIDTH
+        mov CX, AX
+
+        OPEN_BOMBS_LOOP:
+        push CX
+        dec CX
+        mov DL, CL
+        call OPEN_BOMBS_IN_LINE
+        pop CX
+        loop OPEN_BOMBS_LOOP
+
+        pop DX
+        pop CX
+        pop BX
+        pop AX
+        ret
+    endp
+
+    OPEN_BOMBS_IN_LINE proc
+
+        push AX
+        push BX
+        push CX
+        push DX
+
+        xor CX,CX
+
+        call GET_BOARD_HEIGHT
+        mov CX, AX
+
+        OPEN_BOMBS_IN_LINE_LOOP:
+
+        push CX
+        dec CL
+        mov DH,CL
+        call HAS_BOMB_IN_POSITION
+        cmp AX,1
+        jz EXPLODE
+        
+        END_LOOP:
+
+        pop CX
+        loop OPEN_BOMBS_IN_LINE_LOOP
+        jmp OPEN_BOMBS_IN_LINE_END
+
+        EXPLODE:
+
+        push AX
+        mov AX, BOMB_BLOCK
+        call DRAW_BLOCK
+        pop AX
+        jmp END_LOOP
+        
+        OPEN_BOMBS_IN_LINE_END:
+        pop DX
+        pop CX
+        pop BX
+        pop AX
+
+        ret
+    endp
+
+    RECURSIVE_REVEAL proc
+
+        push AX
+        push BX
+        push CX
+        push DX
+        push DI
+
+        mov BX, DX
+
+        mov CX, 8
+        mov DI, CX
+
+        REVEAL_LOOP:
+
+        push DX
+        push BX
+        mov BX, offset possible_x_moves
+        mov AX, [BX+DI]
+        add DH, AL
+
+        mov BX, offset possible_y_moves
+        mov AX, [BX+DI]
+        add DL, AL
+        pop BX
+        
+        cmp BX, DX
+        jz NEXT_RECURSIVE
+        call REVEAL_BLOCK
+        NEXT_RECURSIVE: 
+        pop DX
+
+        dec DI
+        loop REVEAL_LOOP
+
+        pop DI
+        pop DX
+        pop CX
+        pop BX
+        pop AX
+
+        ret
+    endp
+
+    REVEAL_BLOCK proc
+
+        call GET_POSITION_VALUE
+        cmp AX, EMPTY_VALUE
+        jz REVEAL_END
+
+        call GET_SCREEN_POSITION_VALUE
+        CMP AX, COVERED_BLOCK
+        jnz REVEAL_END
+
+        call GET_POSITION_VALUE
+        push AX
+        push BX
+        push DI
+
+        MOV BL, 2
+        mul BL
+
+        mov BX, offset blocks
+        mov DI, AX
+
+        mov AX, [BX+DI]
+        pop DI
+        pop BX
+
+        call DRAW_BLOCK
+        call ADD_UNCOVERED_BLOCK
+        pop AX
+
+        cmp AX, 0
+        ja REVEAL_END
+
+        call RECURSIVE_REVEAL
+
+        REVEAL_END:
         ret
     endp
 
@@ -1554,10 +1889,8 @@
         push SI
 
         push AX
-
         mov AX, VIDEO_MEM_START
         mov ES, AX
-
         pop AX
 
         push AX
@@ -1621,6 +1954,83 @@
         ret
     endp
 
+    ADD_UNCOVERED_BLOCK proc
+
+        push AX
+        push BX
+
+        mov BX, offset uncovered_blocks
+        mov AX, [BX]
+        inc AX
+        mov [BX], AX
+
+
+        pop BX
+        pop AX
+
+        ret
+    endp
+
+    IS_GAME_WON proc
+
+        push BX
+        push CX
+        push DX
+        mov BX, offset board_size
+        mov CX, [BX]
+
+        mov BX, offset uncovered_blocks
+        mov DX, [BX]
+
+        call GET_NUM_MINES
+        add AX, DX ; somando nro de bombas com o nro de casas j? abertas
+
+        cmp AX, CX ; se for igual ao total de posicoes do tabuleiro, vence
+        jz IS_VICTORY
+        mov AX,0
+        jmp IS_GAME_WON_END
+
+        IS_VICTORY:
+
+        call PRINT_VICTORY
+        call PRESS_ANY_KEY
+
+        push AX
+        mov AX, 3
+        call SLEEP
+        pop AX
+
+        mov AX, 1
+        IS_GAME_WON_END:
+        pop DX
+        pop CX
+        pop BX
+
+        ret
+    endp
+
+    PRINT_VICTORY proc
+
+        push AX
+        push BX
+        push CX
+        push DX
+
+        mov AX, offset victory
+        mov BX, GREEN
+        mov CX, VICTORY_STR_LEN
+        mov DH, 0BH
+        mov DL, 24  
+        
+        call WRITE_IN_VIDEO_MEM
+
+        pop DX
+        pop CX
+        pop BX
+        pop AX
+        ret
+    endp
+
     IS_GAME_OVER proc
 
         push BX
@@ -1669,8 +2079,11 @@
 
         call VALIDATE_COMMAND_INPUT
         cmp AX, 1
-        je GAME_IS_OVER
+        jnz CLEAR
 
+        call EXEC_COMMAND
+
+        CLEAR:
         call GET_BOARD_HEIGHT
         inc AX
         inc AX
