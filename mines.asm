@@ -5,32 +5,49 @@
 
 .data
 
+    ; =========== VARI?VEIS GERAIS =========== ;
+    
+    BCK equ 8
+    LF equ 10
+    CR equ 13
+    SPACE equ 32
+
+    INPUT_LIMIT equ 3
+    
+    VIDEO_MODE EQU 01H             ;modo de video para tela 40x25 e texto 8x8
+    VIDEO_MEM_START EQU 0B800H     ;endereco do buffer de video para modo grafico 01H
+    
+    MAX_COLS EQU 80                ;maximo de colunas 40 por 2 bytes
+    MAX_ROWS EQU 40                ;maximo de linhas 20 por 2 bytes
+
+    RED EQU 4H
+    GREEN EQU 2H
+    L_GREEN EQU 0AH
+    BLUE EQU 1H
+    CYAN EQU 3H
+    MAGENTA EQU 5H
+    BROWN EQU 6H
+    WHITE EQU 0FH
+    L_GRAY EQU 7H
+    D_GRAY EQU 8H
+
     ;=========== TITULOS ===========;
+    names db '                POR       ',10,13
+          db '           ARTHUR CORSO   ',10,13
+          db '         MARCELLO FABRIZIO',10,13
 
-    game_title db 'CAMPO MINADO'
-    GAME_TITLE_STR_LEN EQU 12
+    NAMES_STR_LEN EQU $-names
 
-    by_str db 'POR'
-    BY_STR_LEN EQU 3
+    title_str db'     ___    _    __  __  ___   ___     ',10,13 
+              db'    / __|  /_\  |  \/  || _ \ / _ \    ',10,13
+              db'   | (__  / _ \ | |\/| ||  _/| (_) |   ',10,13
+              db'    \___|/_/ \_\|_|  |_||_|   \___/    ',10,13
+              db'  __  __  __  _  _    _    ___    ___  ',10,13
+              db' |  \/  ||__|| \| |  /_\  |   \  / _ \ ',10,13
+              db' | |\/| | || | .` | / _ \ | |) || (_) |',10,13
+              db' |_|  |_||__||_|\_|/_/ \_\|___/  \___/ ',10,13
 
-    name_arthur db 'ARTHUR CORSO'
-    NAME_ARTHUR_STR_LEN EQU 12
-
-    name_marcello db 'MARCELLO FABRIZIO'
-    NAME_MARCELLO_STR_LEN EQU 17
-
-    title_1 db '   ___    _    __  __  ___   ___  '
-    title_2 db '  / __|  /_\  |  \/  || _ \ / _ \ '
-    title_3 db ' | (__  / _ \ | |\/| ||  _/| (_) |'
-    title_4 db '  \___|/_/ \_\|_|  |_||_|   \___/ '
-
-    title_6 db ' __  __  __  _  _    _    ___    ___  '
-    title_7 db '|  \/  ||__|| \| |  /_\  |   \  / _ \ '
-    title_8 db '| |\/| | || | .` | / _ \ | |) || (_) |'
-    title_9 db '|_|  |_||__||_|\_|/_/ \_\|___/  \___/ '
-
-    TITLE_1_STR_LEN EQU 35
-    TITLE_2_STR_LEN EQU 38
+    TITLE_STR_LEN EQU $-title_str
 
     victory db 'PARABENS!'
     VICTORY_STR_LEN EQU 9
@@ -51,6 +68,10 @@
 
     config_options_lines db 16,18,20
     config_options dw 3 dup (?)
+
+    num_mines dw ?
+    board_width dw ?
+    board_height dw ?
 
     MAX_NUM_MINES EQU 5
 
@@ -114,35 +135,12 @@
     user_command_options dw 3 dup (?)
     user_command_options_cols db 0,4,7
 
+    user_command dw ?
+    command_x dw ?
+    command_y dw ?
+
     MARK_COMMAND EQU 1Dh
     UNCOVER_COMMAND EQU 25h
-
-    ; =========== VARI?VEIS GERAIS =========== ;
-    
-    BCK equ 8
-    LF equ 10
-    CR equ 13
-    SPACE equ 32
-
-    INPUT_LIMIT equ 3
-    
-    VIDEO_MODE EQU 01H             ;modo de video para tela 40x25 e texto 8x8
-    VIDEO_MEM_START EQU 0B800H     ;endereco do buffer de video para modo grafico 01H
-    
-    MAX_COLS EQU 80                ;maximo de colunas 40 por 2 bytes
-    MAX_ROWS EQU 40                ;maximo de linhas 20 por 2 bytes
-
-    RED EQU 4H
-    GREEN EQU 2H
-    L_GREEN EQU 0AH
-    BLUE EQU 1H
-    CYAN EQU 3H
-    MAGENTA EQU 5H
-    BROWN EQU 6H
-    WHITE EQU 0FH
-    L_GRAY EQU 7H
-    D_GRAY EQU 8H
-
 .code 
 
     ;L? um char e armazena em AX
@@ -334,13 +332,13 @@
         mov AX, VIDEO_MEM_START
         mov ES, AX
         
-        .L1:
+        WRITE_IN_VIDEO_MEM_LOOP:
         
-        movsb
+        movsb               ; move string para ES:DI 
         mov ES:[DI], BX     ; especifica cor do char
         inc DI
         ;
-        loop .L1        
+        loop WRITE_IN_VIDEO_MEM_LOOP
 
         pop SI
         pop ES
@@ -386,11 +384,12 @@
         push CX
         push DX    
 
-        ;call PRINT_ASCII_TITLE
-        ;call PRINT_AUTHORS
+        call PRINT_TITLE
+        call PRINT_AUTHORS
         call PRINT_CONFIGURATIONS
 
         call GET_GAME_CONFIGS  
+        call STORE_CONFIGS
 
         pop DX
         pop CX
@@ -398,113 +397,42 @@
         pop AX
         ret
     endp 
-    
-    PRINT_ASCII_TITLE proc
 
-        mov DL, 1   
-        mov DH, 2
-        mov BX, GREEN
+    ; Imprime dada string em dada posicao
+    ; CONDICAO INICIAL:
+    ;   BP = Deslocamento da string na memoria
+    ;   CX = Tamanho da string
+    ;   DH = Linha inicial
+    ;   DL = Coluna inicial
+    PRINT_STRING proc
 
-        mov AX, offset title_1
-        mov CX, TITLE_1_STR_LEN
+        mov AH, 13H
+        mov AL, 0
+        mov BH, 0
+        mov BL, 2 
 
-        call WRITE_IN_VIDEO_MEM
+        int 10H         
+        ret
+    endp
 
-        mov DL, 2    
-        mov DH, 2
-        mov BX, GREEN
-
-        mov AX, offset title_2
-        mov CX, TITLE_1_STR_LEN
-
-        call WRITE_IN_VIDEO_MEM
-
-        mov DL, 3    
-        mov DH, 2
-        mov BX, GREEN
-
-        mov AX, offset title_3
-        mov CX, TITLE_1_STR_LEN
-
-        call WRITE_IN_VIDEO_MEM
-
-        mov DL, 4    
-        mov DH, 2
-        mov BX, GREEN
-
-        mov AX, offset title_4
-        mov CX, TITLE_1_STR_LEN
-
-        call WRITE_IN_VIDEO_MEM
-
-        mov DL, 5   
-        mov DH, 1
-        mov BX, GREEN
-
-        mov AX, offset title_6
-        mov CX, TITLE_2_STR_LEN
-
-        call WRITE_IN_VIDEO_MEM
-
-        mov DL, 6    
-        mov DH, 1
-        mov BX, GREEN
-
-        mov AX, offset title_7
-        mov CX, TITLE_2_STR_LEN
-
-        call WRITE_IN_VIDEO_MEM
-
-        mov DL, 7    
-        mov DH, 1
-        mov BX, GREEN
-
-        mov AX, offset title_8
-        mov CX, TITLE_2_STR_LEN
-
-        call WRITE_IN_VIDEO_MEM
-
-        mov DL, 8    
-        mov DH, 1
-        mov BX, GREEN
-
-        mov AX, offset title_9
-        mov CX, TITLE_2_STR_LEN
-
-        call WRITE_IN_VIDEO_MEM
-        ret    
+    PRINT_TITLE proc
+        mov DH, 0                    
+        mov DL, 0                    
+        mov CX, TITLE_STR_LEN        
+        mov BP, offset title_str     
+        call PRINT_STRING
+        ret
     endp
 
     PRINT_AUTHORS proc
 
-        mov DL, 10    
-        mov DH, 16
-        mov BX, GREEN
+        mov DH, 10
+        mov DL, 0
+        mov CX, NAMES_STR_LEN     
+        mov BP, offset names     
+        call PRINT_STRING
 
-        mov AX, offset by_str
-        mov CX, BY_STR_LEN
-
-        call WRITE_IN_VIDEO_MEM
-
-        mov DL, 11    
-        mov DH, 12
-        mov BL, GREEN
-
-        mov AX, offset name_arthur
-        mov CX, NAME_ARTHUR_STR_LEN
-
-        call WRITE_IN_VIDEO_MEM
-
-        mov DL, 12
-        mov DH, 9
-        mov BL, GREEN
-
-        mov AX, offset name_marcello
-        mov CX, NAME_MARCELLO_STR_LEN
-
-        call WRITE_IN_VIDEO_MEM
-        ret 
-        
+        ret
     endp
 
     PRINT_CONFIGURATIONS proc
@@ -926,21 +854,56 @@
         ret
     endp
 
-    GET_NUM_MINES proc    
-        MOV AX, 0
+    STORE_CONFIGS proc
+
+        push AX
+        push BX
+
+        mov AX, 0
         call GET_CONFIG_OPTION
+
+        mov BX, offset num_mines
+        mov [BX], AX
+
+        mov AX, 1
+        call GET_CONFIG_OPTION
+
+        mov BX, offset board_width
+        mov [BX], AX
+
+        mov AX, 2
+        call GET_CONFIG_OPTION
+
+        mov BX, offset board_height 
+        mov [BX], AX
+
+        pop BX
+        pop AX
+
+        ret
+    endp
+
+    GET_NUM_MINES proc
+        push BX    
+        mov BX, offset num_mines
+        mov AX, [BX]
+        pop BX
         ret
     endp
 
     GET_BOARD_WIDTH proc
-        MOV AX, 1
-        call GET_CONFIG_OPTION
+        push BX    
+        mov BX, offset board_width
+        mov AX, [BX]
+        pop BX
         ret
     endp
 
     GET_BOARD_HEIGHT proc  
-        MOV AX, 2
-        call GET_CONFIG_OPTION
+        push BX    
+        mov BX, offset board_height
+        mov AX, [BX]
+        pop BX
         ret
     endp
 
@@ -971,26 +934,64 @@
         ret
     endp
 
-    GET_COMMAND proc
+    STORE_COMMAND proc
+
+        push AX
+        push BX
+
         mov AX, 0
         call GET_COMMAND_OPTION
+
+        mov BX, offset user_command
+        mov [BX], AX
+
+        mov AX, 1
+        call GET_COMMAND_OPTION
+
+        mov BX, offset command_x
+        mov [BX], AX
+
+        mov AX, 2
+        call GET_COMMAND_OPTION
+
+        mov BX, offset command_y 
+        mov [BX], AX
+
+        pop BX
+        pop AX
+
+        ret
+
+        ret
+    endp
+
+    GET_COMMAND proc
+        push BX    
+        mov BX, offset user_command
+        mov AX, [BX]
+        pop BX
         ret
     endp
 
 
     GET_COMMAND_X_COORD proc
-        mov AX, 1
-        call GET_COMMAND_OPTION
+        push BX    
+        push DX
+        mov AX, 2
+        mov DX, 10h
+        mov BX, offset command_x
+        mov AX, [BX]
+        sub AX, DX
+        pop DX
+        pop BX
         ret
     endp
 
     GET_COMMAND_Y_COORD proc
-        push DX
-        mov AX, 2
-        mov DX, 10h
-        call GET_COMMAND_OPTION
-        sub AX, DX
-        pop DX
+        push BX
+        mov BX, offset command_y
+        mov AX, [BX]
+        pop BX
         ret
     endp
 
@@ -1407,9 +1408,11 @@
         IS_UNCOVER:
 
         call GET_COMMAND_X_COORD
+        dec AX
         mov DL, AL
 
         call GET_COMMAND_Y_COORD
+        dec AX
         mov DH, AL
 
         call UNCOVER
@@ -1475,10 +1478,12 @@
         UNMARK:
 
         call GET_COMMAND_X_COORD
-        mov DH, AL
+        dec AX
+        mov DL, AL
 
         call GET_COMMAND_Y_COORD
-        mov DL, AL
+        dec AX
+        mov DH, AL
 
         mov AX, COVERED_BLOCK
         call DRAW_BLOCK
@@ -1629,7 +1634,7 @@
         mov BX, offset blocks
         mov DI, AX
 
-        mov AX, [BX]
+        mov AX, [BX+DI]
         pop DI
         pop BX
 
@@ -2066,6 +2071,7 @@
     main:
         mov AX, @DATA
         mov DS, AX
+        mov ES, AX
         
         START_SCREEN_LOOP:        
         call START_VIDEO_MODE
@@ -2083,6 +2089,7 @@
         jz GAME_IS_OVER
 
         call GET_USER_COMMAND
+        call STORE_COMMAND
 
         ;call VALIDATE_COMMAND_INPUT
         ;cmp AX, 1
