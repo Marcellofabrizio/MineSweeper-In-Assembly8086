@@ -94,7 +94,7 @@
     BOMB_BLOCK EQU 0040FH
     EMPTY_BLOCK EQU 0F7B0h
     COVERED_BLOCK EQU 0F7FEH
-    MARKED_BLOCK EQU 047FEH
+    MARKED_BLOCK EQU 0473FH
     BLOCK_NEAR_1 EQU 08131h
     BLOCK_NEAR_2 EQU 08232h
     BLOCK_NEAR_3 EQU 08333h
@@ -113,7 +113,7 @@
     logical_board db MAX_BOARD_SIZE dup(?)
 
     uncovered_blocks dw ?
-    board_size dw ?
+    board_size dw ?     ; linhas x colunas
 
     game_result dw 0    ; 0 - perdeu, 1 - ganhou, so sera valido se game_over = 1
     game_over dw 0      ; 0 - jogo em andamento, 1 - jogo terminou
@@ -1399,11 +1399,17 @@
     EXEC_COMMAND proc
 
         push AX
+        push DX
 
         call GET_COMMAND
 
         cmp AX, UNCOVER_COMMAND
         je IS_UNCOVER
+
+        cmp AX, MARK_COMMAND
+        je IS_MARK
+
+        jmp EXEC_END
 
         IS_UNCOVER:
 
@@ -1416,13 +1422,46 @@
         mov DH, AL
 
         call UNCOVER
+
+        IS_MARK:
+
+        call GET_COMMAND_X_COORD
+        dec AX
+        mov DL, AL
+
+        call GET_COMMAND_Y_COORD
+        dec AX
+        mov DH, AL
+
+        call MARK        
+
+        EXEC_END:
+        pop DX
         pop AX
         ret
     endp
 
     MARK proc
 
+        push BX
 
+        call GET_SCREEN_POSITION_VALUE
+        cmp AX, COVERED_BLOCK
+        jnz MARK_END
+
+        cmp AX, MARKED_BLOCK
+        jz MARK_END
+
+        mov AX, MARKED_BLOCK
+        call DRAW_BLOCK
+        mov BX, offset marked_bombs
+        mov AX, [BX]
+        inc AX
+        mov [BX], AX
+
+        call DRAW_FLAG_COUNTER
+        MARK_END:
+        pop BX
         ret
     endp
 
@@ -1544,7 +1583,7 @@
         mov DH,CL
         call HAS_BOMB_IN_POSITION
         cmp AX,1
-        jz EXPLODE
+        jz BOOM
         
         END_LOOP:
 
@@ -1552,7 +1591,7 @@
         loop OPEN_BOMBS_IN_LINE_LOOP
         jmp OPEN_BOMBS_IN_LINE_END
 
-        EXPLODE:
+        BOOM:
 
         push AX
         mov AX, BOMB_BLOCK
@@ -1893,6 +1932,7 @@
         ret
     endp
 
+    ; Desenha bloco armazenado em AX
     DRAW_BLOCK proc
 
         push BX
@@ -1995,9 +2035,9 @@
         mov DX, [BX]
 
         call GET_NUM_MINES
-        add AX, DX ; somando nro de bombas com o nro de casas j? abertas
+        add AX, DX
 
-        cmp AX, CX ; se for igual ao total de posicoes do tabuleiro, vence
+        cmp AX, CX
         jz IS_VICTORY
         mov AX,0
         jmp IS_GAME_WON_END
