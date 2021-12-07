@@ -91,7 +91,7 @@
     BOMB EQU 0AH
     EMPTY_VALUE EQU '?'
 
-    BOMB_BLOCK EQU 0040FH
+    BOMB_BLOCK EQU 0472AH
     EMPTY_BLOCK EQU 0F7B0h
     COVERED_BLOCK EQU 0F7FEH
     MARKED_BLOCK EQU 0473FH
@@ -351,8 +351,8 @@
     ; Calcula e retorna o deslocamento da mem?ria 
     ; da posi??o (linha, coluna) espeficada
     ; CONDI??O DE ENTRADA:
-    ;   DL = Linha
     ;   DH = Coluna
+    ;   DL = Linha
     ;
     ; CONDI??O DE SA?DA:
     ;   AX = Deslocamento em mem?ria da posi??o
@@ -1081,7 +1081,7 @@
         push CX        
 
         dec CX
-        Mov DL, CL          ; seta coordenada Y em DL
+        Mov DH, CL          ; seta coordenada Y em DL
 
         call GET_BOARD_WIDTH
         mov CX, AX
@@ -1091,7 +1091,7 @@
         push CX
 
         dec CX
-        mov DH, CL          ; Seta coordenada X em DH
+        mov DL, CL          ; Seta coordenada X em DH
 
         ;Com X e Y em DX, agora se percore a area ao redor da posicao para setar
         ;o numero de minas ao redor de Tab[x, y] 
@@ -1187,11 +1187,11 @@
 
         mov BX, offset possible_x_moves
         mov AX, [BX+DI]
-        add DH, AL
+        add DL, AL
 
         mov BX, offset possible_y_moves
         mov AX, [BX+DI]
-        add DL, AL
+        add DH, AL
 
         call HAS_BOMB_IN_POSITION
 
@@ -1249,8 +1249,8 @@
 
     ; Retorna o valor da posicao X, Y no tabuleiro logico
     ; CONDICAO INICIAL:
-    ;   DH = Coordenada X
-    ;   DL = Coordenada Y
+    ;   DL = Coordenada X
+    ;   DH = Coordenada Y
     ; CONDICAO DE SAIDA:
     ;   AX = Valor de TabLogico[X, y]
     GET_POSITION_VALUE proc
@@ -1309,12 +1309,12 @@
 
         call GET_BOARD_HEIGHT
         
-        cmp DL, AL      ; Compara se casa est? no limite de colunas
+        cmp DH, AL      ; Compara se casa est? no limite de colunas
         ja INVALID_POSITION
 
         call GET_BOARD_WIDTH
 
-        cmp DH, AL
+        cmp DL, AL
         ja INVALID_POSITION
 
         jmp VALID_POSITION
@@ -1342,8 +1342,8 @@
         xor BX, BX
 
         call GET_BOARD_WIDTH
-        mul DL              ; Multiplica coordenada Y pelo numero de colunas
-        mov BL, DH
+        mul DH              ; Multiplica coordenada Y pelo numero de colunas
+        mov BL, DL
         add AX, BX
 
         pop BX
@@ -1422,6 +1422,8 @@
         mov DH, AL
 
         call UNCOVER
+
+        jmp EXEC_END
 
         IS_MARK:
 
@@ -1515,14 +1517,6 @@
         jmp UNCOVER_END
 
         UNMARK:
-
-        call GET_COMMAND_X_COORD
-        dec AX
-        mov DL, AL
-
-        call GET_COMMAND_Y_COORD
-        dec AX
-        mov DH, AL
 
         mov AX, COVERED_BLOCK
         call DRAW_BLOCK
