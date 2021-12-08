@@ -975,23 +975,23 @@
 
 
     GET_COMMAND_X_COORD proc
-        push BX    
-        push DX
-        mov AX, 2
-        mov DX, 10h
+        push BX
         mov BX, offset command_x
         mov AX, [BX]
-        sub AX, DX
-        pop DX
         pop BX
         ret
     endp
 
     GET_COMMAND_Y_COORD proc
-        push BX
+        push BX    
+        push DX
+        mov DX, 10h
         mov BX, offset command_y
         mov AX, [BX]
+        sub AX, DX
+        pop DX
         pop BX
+
         ret
     endp
 
@@ -1081,7 +1081,7 @@
         push CX        
 
         dec CX
-        Mov DH, CL          ; seta coordenada Y em DL
+        Mov DL, CL          ; seta coordenada Y em DL
 
         call GET_BOARD_WIDTH
         mov CX, AX
@@ -1091,11 +1091,11 @@
         push CX
 
         dec CX
-        mov DL, CL          ; Seta coordenada X em DH
+        mov DH, CL          ; Seta coordenada X em DH
 
         ;Com X e Y em DX, agora se percore a area ao redor da posicao para setar
         ;o numero de minas ao redor de Tab[x, y] 
-        call SET_BOMB_GRID
+        call CALCULATE_GRID
 
         pop CX
 
@@ -1141,7 +1141,7 @@
         inc DX
         mov DI, DX
 
-        cmp BX, DX              ; Verifica se n?o passou do limite do campo
+        cmp DX, BX              ; Verifica se n?o passou do limite do campo
         jna HAS_BOMBS_TO_PLANT_LOOP
 
         mov DX, 0
@@ -1168,14 +1168,14 @@
     ; CONDICAO INICIAL:
     ;   DH = Coordenada X no tabuleiro
     ;   DL = Coordenada Y no tabuleiro
-    SET_BOMB_GRID proc
+    CALCULATE_GRID proc
 
         push CX
         push DX
         push DI
 
-        call IS_POSITION_IN_RANGE
-        cmp AX, 0
+        call HAS_BOMB_IN_POSITION
+        cmp AX, 1                   ;   Se a casa já possuir bomba, não precisa calcular sua posição
         jz SET_BOMBS_GRID_END
 
         mov CX, 8               ;   Numero possiveis
@@ -1187,20 +1187,20 @@
 
         mov BX, offset possible_x_moves
         mov AX, [BX+DI]
-        add DL, AL
+        add DH, AL
 
         mov BX, offset possible_y_moves
         mov AX, [BX+DI]
-        add DH, AL
+        add DL, AL
 
         call HAS_BOMB_IN_POSITION
 
-        push DX
+        push AX
         mov BX, offset bombs_in_grid_tmp
-        mov DX, [BX]
-        add AX, DX
+        mov AX, [BX]
+        inc AX
         mov [BX], AX
-        pop DX
+        pop AX
         
         pop DX
         dec DI
@@ -1249,8 +1249,8 @@
 
     ; Retorna o valor da posicao X, Y no tabuleiro logico
     ; CONDICAO INICIAL:
-    ;   DL = Coordenada X
-    ;   DH = Coordenada Y
+    ;   DH = Coordenada X
+    ;   DL = Coordenada Y
     ; CONDICAO DE SAIDA:
     ;   AX = Valor de TabLogico[X, y]
     GET_POSITION_VALUE proc
@@ -1415,11 +1415,11 @@
 
         call GET_COMMAND_X_COORD
         dec AX
-        mov DL, AL
+        mov DH, AL
 
         call GET_COMMAND_Y_COORD
         dec AX
-        mov DH, AL
+        mov DL, AL
 
         call UNCOVER
 
@@ -1429,11 +1429,11 @@
 
         call GET_COMMAND_X_COORD
         dec AX
-        mov DL, AL
+        mov DH, AL
 
         call GET_COMMAND_Y_COORD
         dec AX
-        mov DH, AL
+        mov DL, AL
 
         call MARK        
 
@@ -1545,7 +1545,6 @@
 
         OPEN_BOMBS_LOOP:
         push CX
-        dec CX
         mov DL, CL
         call OPEN_BOMBS_IN_LINE
         pop CX
@@ -1570,10 +1569,9 @@
         call GET_BOARD_HEIGHT
         mov CX, AX
 
-        OPEN_BOMBS_IN_LINE_LOOP:
+        OPEN_BOMBS_IN_COL:
 
         push CX
-        dec CL
         mov DH,CL
         call HAS_BOMB_IN_POSITION
         cmp AX,1
@@ -1582,7 +1580,7 @@
         END_LOOP:
 
         pop CX
-        loop OPEN_BOMBS_IN_LINE_LOOP
+        loop OPEN_BOMBS_IN_COL
         jmp OPEN_BOMBS_IN_LINE_END
 
         BOOM:
@@ -2083,7 +2081,6 @@
 
         mov BX, offset game_over
         mov AX, [BX]
-        cmp AX, 1
 
         pop BX
 
@@ -2120,6 +2117,7 @@
 
         GAME_LOOP:
         call IS_GAME_OVER
+        cmp AX, 1
         jz GAME_IS_OVER
 
         call GET_USER_COMMAND
