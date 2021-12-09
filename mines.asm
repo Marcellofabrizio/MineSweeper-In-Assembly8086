@@ -113,6 +113,8 @@
 
     ; vetor onde ser?o feitas as operacoes logicas do jogo
     logical_board db MAX_BOARD_SIZE dup(?)
+    ; vetor usado para resetar o vetor do tabuleiro lógico
+    empty_vector db MAX_BOARD_SIZE dup(?)
 
     uncovered_blocks dw ?
     board_size dw ?     ; linhas x colunas
@@ -1054,6 +1056,8 @@
 
         push AX
         push BX
+        push DI
+        push SI
 
         call GET_BOARD_WIDTH
         mov BX, AX
@@ -1078,6 +1082,12 @@
         mov BX, offset game_over
         mov [BX], AX
 
+        mov DI, offset logical_board
+        mov SI, offset empty_vector
+        rep movsb
+
+        pop SI
+        pop DI
         pop BX
         pop AX
 
@@ -2152,9 +2162,9 @@
         call GET_USER_COMMAND
         call STORE_COMMAND
 
-        ;call VALIDATE_COMMAND_INPUT
-        ;cmp AX, 1
-        ;jnz CLEAR
+        call VALIDATE_COMMAND_INPUT
+        cmp AX, 1
+        jnz CLEAR
 
         call EXEC_COMMAND
 
