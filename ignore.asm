@@ -32,22 +32,6 @@
     D_GRAY EQU 8H
 
     ;=========== TITULOS ===========;
-    names db '                POR       ',10,13
-          db '           ARTHUR CORSO   ',10,13
-          db '         MARCELLO FABRIZIO',10,13
-
-    NAMES_STR_LEN EQU $-names
-
-    title_str db '     ___    _    __  __  ___   ___     ',10,13 
-              db '    / __|  /_\  |  \/  || _ \ / _ \    ',10,13
-              db '   | (__  / _ \ | |\/| ||  _/| (_) |   ',10,13
-              db '    \___|/_/ \_\|_|  |_||_|   \___/    ',10,13
-              db '  __  __  __  _  _    _    ___    ___  ',10,13
-              db ' |  \/  ||__|| \| |  /_\  |   \  / _ \ ',10,13
-              db ' | |\/| | || | .` | / _ \ | |) || (_) |',10,13
-              db ' |_|  |_||__||_|\_|/_/ \_\|___/  \___/ ',10,13
-
-    TITLE_STR_LEN EQU $-title_str
 
     victory db 'PARABENS!'
     VICTORY_STR_LEN EQU $-victory
@@ -62,11 +46,6 @@
 
     configurations db 'CONFIGURACOES'
     CONFIGURATIONS_STR_LEN EQU 13 
-
-    config_str db '       NUMERO DE MINAS (>=5):   ',10,13,10,13
-               db '       LARGURA DO CAMPO [5;30]: ',10,13,10,13
-               db '       ALTURA DO CAMPO [5;20]:  ',10,13
-    CONFIG_STR_LEN EQU $-config_str
 
     config_options_lines db 16,18,20
     config_options dw 3 dup (?)
@@ -95,7 +74,7 @@
 
     BOMB_BLOCK EQU 0472AH
     EMPTY_BLOCK EQU 0F7B0H
-    COVERED_BLOCK EQU 0F7FFH
+    COVERED_BLOCK EQU 0F7FEH
     MARKED_BLOCK EQU 0673FH
     BLOCK_NEAR_1 EQU 08131H
     BLOCK_NEAR_2 EQU 08232H
@@ -123,13 +102,13 @@
 
     ; esta variavel e a semente que vai ser utilizada para a geracao de numeros aleatorios 
     ; com o gerador congruente linear
-    prev_seed_lcg dw 22
+    prev_seed_lcg dw 1664
     LCG_MULTIPLIER EQU 21   ; multiplicador para o LCG
     LCG_INCREMENT EQU 13    
 
     bombs_in_grid_tmp db 0  ; variável temporária para guardar valor do cálculo da vizinhança
 
-    hidden_line db 40 dup (255)
+    hidden_line db 40 dup (254)
 
     flagged_bombs_counter db 'BOMBAS MARCADAS  '
     FLAGGED_BOMBS_COUNTER_STR_LEN EQU 17
@@ -386,10 +365,6 @@
         push CX
         push DX    
 
-        call PRINT_TITLE
-        call PRINT_AUTHORS
-        call PRINT_CONFIGURATIONS
-
         call GET_GAME_CONFIGS  
         call STORE_CONFIGS
 
@@ -414,48 +389,6 @@
         mov BL, 2 
 
         int 10H         
-        ret
-    endp
-
-    PRINT_TITLE proc
-        mov DH, 0                    
-        mov DL, 0                    
-        mov CX, TITLE_STR_LEN        
-        mov BP, offset title_str     
-        call PRINT_STRING
-        ret
-    endp
-
-    PRINT_AUTHORS proc
-
-        mov DH, 10
-        mov DL, 0
-        mov CX, NAMES_STR_LEN     
-        mov BP, offset names     
-        call PRINT_STRING
-
-        ret
-    endp
-
-    PRINT_CONFIGURATIONS proc
-
-        mov DH, 11
-        mov DL, 14    
-        mov BX, RED
-        shl BX, 4
-        add BL, WHITE
-
-        mov AX, offset configurations
-        mov CX, CONFIGURATIONS_STR_LEN
-
-        call WRITE_IN_VIDEO_MEM
-        
-        mov DH, 16
-        mov DL, 0   
-        mov CX, CONFIG_STR_LEN
-        mov BP, offset config_str 
-        call PRINT_STRING
-
         ret
     endp
 
@@ -619,49 +552,6 @@
         pop DX
         pop CX
         pop BX    
-        ret
-    endp
-
-    END_SCREEN proc
-
-        push AX
-        push BX
-        push CX 
-        push DX
-
-        mov BX, offset game_result  
-        mov AX, [BX]
-
-        cmp AX, 0
-        jz DEFEATED
-
-        mov DH, 15
-        mov DL, 7
-        mov CX, VICTORY_STR_LEN     
-        mov BP, offset victory  
-        call PRINT_STRING
-        jmp READ_PLAY_AGAIN
-
-        DEFEATED:
-
-        mov DH, 15
-        mov DL, 7
-        mov CX, DEFEAT_STR_LEN     
-        mov BP, offset defeat    
-        call PRINT_STRING
-
-        READ_PLAY_AGAIN:
-
-        mov DH, 17
-        mov DL, 7
-        mov CX, PLAY_AGAIN_STR_LEN     
-        mov BP, offset play_again
-        call PRINT_STRING
-
-        pop DX
-        pop CX
-        pop BX
-        pop AX
         ret
     endp
 
@@ -1159,7 +1049,7 @@
         mov BX, offset logical_board
         mov AX, [BX+DI]
 
-        cmp AL, BOMB            ; Verifica se posicao possui uma bomba
+        cmp AX, BOMB            ; Verifica se posicao possui uma bomba
         jnz PUT_BOMB            ; se nao tiver bomba, planta
 
         pop BX
@@ -1219,8 +1109,6 @@
         add DL, AL
 
         call HAS_BOMB_IN_POSITION
-        cmp AX, 1
-        ;jnz NO_BOMB_NEAR
 
         push AX
         mov BX, offset bombs_in_grid_tmp
@@ -1228,9 +1116,7 @@
         inc AX
         mov [BX], AX
         pop AX
-
-        NO_BOMB_NEAR:
-
+        
         pop DX
         dec DI
         loop BLOCKS_LOOP
@@ -1510,7 +1396,7 @@
         jz UNMARK
 
         call GET_POSITION_VALUE
-        cmp AL, BOMB
+        cmp AX, BOMB
         jz IS_BOMB
 
         jmp REVEAL
@@ -2169,14 +2055,8 @@
         jmp GAME_LOOP
 
         GAME_IS_OVER:
-        call START_VIDEO_MODE
-        call END_SCREEN
-
-        call READ_CHAR
-        cmp AL, 'S'
-        jz START_SCREEN_LOOP
-        cmp AL, 's'
-        jz START_SCREEN_LOOP
+        mov BX, offset game_result
+        mov AX, [BX]
 
         mov al, 0h
         mov ah, 4ch
